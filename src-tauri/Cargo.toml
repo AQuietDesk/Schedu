@@ -1,0 +1,59 @@
+[package]
+name = "tauri-app"
+version = "0.4.0"
+description = "Schedu, a school and personal planner"
+authors = ["AQuietDesk <discover@aquietdesk.com>"]
+license = "MIT"
+homepage = "https://aquietdesk.com"
+repository = "https://github.com/AQuietDesk/Schedu"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "tauri_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# `tauri-build`'s is_dev() (see its build.rs) decides devUrl-vs-frontendDist
+# purely by whether tauri's own `custom-protocol` feature is enabled — NOT by
+# debug/release profile. Without this block, that feature is never enabled by
+# ANY build (cargo build, cargo build --release, or a raw `cargo run`), so the
+# compiled app always tries to load devUrl (http://localhost:1420) at
+# runtime, even in release — this is what caused the persistent "localhost
+# refused to connect" screen. `tauri dev` builds with default features
+# disabled (so custom-protocol stays off and devUrl is used, as intended for
+# hot-reloading against Vite); every other build path uses default features,
+# which now include custom-protocol, so it correctly loads the embedded
+# frontendDist bundle instead. See docs/TROUBLESHOOTING.md.
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+tiny_http = "0.12"
+rand = "0.9"
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-single-instance = "2"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+

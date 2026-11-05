@@ -1,0 +1,232 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/* -------------------------------------------------------------------------
+   Schedu design tokens.
+
+   One calm neutral ground, one accent (blue) used sparingly for selection
+   and links, and color reserved for meaning: a class's own color, the
+   Personal area's orange, red for overdue. Every surface reads from these
+   variables, so light/dark is a single class flip on <html> (useTheme.ts).
+
+   shadcn's semantic names (--background, --muted, --primary…) are kept and
+   pointed at the same palette so the stock ui/ primitives (Dialog, Select,
+   Switch…) match without per-component overrides.
+   ------------------------------------------------------------------------- */
+
+@theme inline {
+    --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+    --font-heading: var(--font-sans);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    /* Schedu extras */
+    --color-fg2: var(--fg2);
+    --color-fg3: var(--fg3);
+    --color-line: var(--border);
+    --color-line2: var(--line2);
+    --color-hover: var(--hover);
+    --color-sunken: var(--sunken);
+    --color-brand: var(--brand);
+    --color-brand-soft: var(--brand-soft);
+    --color-danger: var(--destructive);
+    --color-danger-soft: var(--danger-soft);
+    --color-success: var(--success);
+    --color-success-soft: var(--success-soft);
+    --color-personal: var(--personal);
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+    --radius-2xl: 16px;
+    --radius-3xl: 20px;
+    --radius-4xl: 24px;
+
+    --shadow-soft: var(--shadow-soft);
+    --shadow-pop: var(--shadow-pop);
+}
+
+:root {
+    --background: #ffffff;
+    --foreground: #1d1d1b;
+    --card: #ffffff;
+    --card-foreground: #1d1d1b;
+    --popover: #ffffff;
+    --popover-foreground: #1d1d1b;
+    --primary: #1d1d1b;
+    --primary-foreground: #ffffff;
+    --secondary: #f4f4f1;
+    --secondary-foreground: #1d1d1b;
+    --muted: #f4f4f1;
+    --muted-foreground: #6f6f6b;
+    --accent: #ececE9;
+    --accent-foreground: #1d1d1b;
+    --destructive: #c4321f;
+    --border: #ececE9;
+    --input: #d9d9d4;
+    --ring: #0b63e5;
+    --sidebar: #f7f7f5;
+    --sidebar-foreground: #1d1d1b;
+    --sidebar-primary: #1d1d1b;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #ececE9;
+    --sidebar-accent-foreground: #1d1d1b;
+    --sidebar-border: #ececE9;
+    --sidebar-ring: #0b63e5;
+
+    --fg2: #5c5c58;
+    --fg3: #6f6f6b;
+    --line2: #d9d9d4;
+    --hover: #ececE9;
+    --sunken: #f4f4f1;
+    --brand: #0b63e5;
+    --brand-soft: #eaf1fd;
+    --danger-soft: #fcedea;
+    --success: #1e7f4f;
+    --success-soft: #e7f4ec;
+    --personal: #d9730d;
+    --day-ring-sleep: #b8b8b2;
+    --day-ring-google: #94a3b8;
+
+    --shadow-soft: 0 1px 2px rgb(20 20 18 / 4%), 0 6px 20px rgb(20 20 18 / 5%);
+    --shadow-pop: 0 2px 6px rgb(20 20 18 / 6%), 0 24px 64px rgb(20 20 18 / 18%);
+    color-scheme: light;
+}
+
+.dark {
+    --background: #191919;
+    --foreground: #ececea;
+    --card: #202020;
+    --card-foreground: #ececea;
+    --popover: #242424;
+    --popover-foreground: #ececea;
+    --primary: #ececea;
+    --primary-foreground: #191919;
+    --secondary: #252525;
+    --secondary-foreground: #ececea;
+    --muted: #252525;
+    --muted-foreground: #93938e;
+    --accent: #2c2c2c;
+    --accent-foreground: #ececea;
+    --destructive: #ff7b67;
+    --border: #2c2c2c;
+    --input: #444441;
+    --ring: #5b9dff;
+    --sidebar: #1f1f1f;
+    --sidebar-foreground: #ececea;
+    --sidebar-primary: #ececea;
+    --sidebar-primary-foreground: #191919;
+    --sidebar-accent: #2c2c2c;
+    --sidebar-accent-foreground: #ececea;
+    --sidebar-border: #2c2c2c;
+    --sidebar-ring: #5b9dff;
+
+    --fg2: #adada8;
+    --fg3: #93938e;
+    --line2: #444441;
+    --hover: #2c2c2c;
+    --sunken: #252525;
+    --brand: #5b9dff;
+    --brand-soft: #1c2940;
+    --danger-soft: #3a1f1b;
+    --success: #4cc38a;
+    --success-soft: #16301f;
+    --personal: #e8893a;
+    --day-ring-sleep: #4a4a47;
+    --day-ring-google: #64748b;
+
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 25%);
+    --shadow-pop: 0 2px 6px rgb(0 0 0 / 40%), 0 24px 64px rgb(0 0 0 / 50%);
+    color-scheme: dark;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    html {
+        @apply font-sans antialiased;
+        font-feature-settings: "ss01", "cv11";
+    }
+    body {
+        @apply bg-background text-foreground;
+        min-height: 100vh;
+        overflow: hidden;
+    }
+    ::selection {
+        background: color-mix(in oklab, var(--brand) 25%, transparent);
+    }
+    /* Quiet, thin scrollbars — the Notion/Apple look rather than chunky OS gutters. */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--line2) transparent;
+    }
+}
+
+@layer components {
+    /* Small uppercase-free section label used in the sidebar and settings. */
+    .lo-label {
+        @apply text-xs font-medium text-fg3;
+    }
+    .lo-kbd {
+        @apply rounded-[5px] border border-line px-1.5 py-px font-mono text-[11px] text-fg3;
+    }
+}
+
+/* Day Ring's "wall hit" feedback when a drag reaches a neighboring block —
+   a scale pulse on the handle being dragged (start/end resize), or a
+   brightness flash on the arc itself (whole-block move, where a scale pulse
+   would visibly wobble since the transform origin is the arc's own bounding
+   box, not the ring's center). */
+@keyframes day-ring-pulse-scale {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.35); }
+}
+@keyframes day-ring-pulse-flash {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.4); }
+}
+
+@keyframes lo-peek-in {
+    from { transform: translateX(16px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes lo-pop-in {
+    from { transform: translateY(-6px) scale(0.985); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

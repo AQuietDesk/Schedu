@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schedu</title>
+    <script>
+      // Applies the dark class before React (and any Tauri IPC round-trip)
+      // ever runs, so switching themes doesn't flash the wrong one on load.
+      // Must stay in sync with src/store/themeStore.ts's persisted shape.
+      (function () {
+        try {
+          var raw = localStorage.getItem("life-os-theme");
+          var theme = raw ? JSON.parse(raw).state.theme : "system";
+          var isDark =
+            theme === "dark" ||
+            (theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (isDark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
