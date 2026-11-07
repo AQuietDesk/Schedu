@@ -42,11 +42,14 @@ restarts itself, usually within a few seconds of opening. Your data is not affec
 ## Schedu Pro: import a syllabus
 
 1. Buy Schedu Pro from **Settings → Schedu Pro → Get Schedu Pro**. Polar emails you a licence key.
+   Pro is a yearly subscription and isn't refundable, so try **Import syllabus** first to see what
+   it does.
 2. Paste the key into the same page and press **Activate**, then **Install**. Schedu downloads
    the Pro version, installs it over itself and restarts. Your data stays where it is.
 3. Add your own Anthropic API key, on the same page. Create an account at platform.claude.com,
    add a few dollars of credit, create an API key, paste it in, and press **Test**. Each syllabus
    costs a few cents on your Anthropic account.
+   Your key is saved only on your PC and is sent only to Anthropic. AQuietDesk never sees it.
 4. Open a class and press **Import syllabus**. Choose the PDF or Word file. In under a minute
    you'll see every deliverable it found. Rows that need a look (no date, only a week number,
    outside the term, in a reading week, already in the class) are listed first. Check each one

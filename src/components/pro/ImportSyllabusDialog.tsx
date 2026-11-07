@@ -44,7 +44,8 @@ function UpgradeCard({ onClose }: { onClose: () => void }) {
           <li>Drop in a PDF or Word syllabus. Every assignment, quiz and exam is read into this class, with grade weights and the instructor.</li>
           <li>You check each row before anything is added. Missing or odd dates are flagged, never guessed.</li>
           <li>Undo a whole import with one click.</li>
-          <li>Runs on your own Anthropic API key, so you pay a few cents per syllabus and your files go only to Anthropic.</li>
+          <li>Runs on your own Anthropic API key, so you pay a few cents per syllabus. Your key and everything imported stay on this PC; files go only to Anthropic.</li>
+          <li>Yearly subscription on up to 3 computers. Non-refundable, so check this preview first.</li>
         </ul>
       )}
       <div className="flex flex-wrap justify-end gap-2 pt-2">
@@ -144,7 +145,8 @@ function Picker({ context, onClose }: { context: Context; onClose: () => void })
       {file && (
         <p className="text-[12.5px] leading-snug text-fg3">
           This file will be sent to Anthropic using your API key and read with {modelLabel}
-          {estimate != null && <>, {formatCents(estimate)} on your Anthropic account</>}. Schedu doesn't keep a copy.
+          {estimate != null && <>, {formatCents(estimate)} on your Anthropic account</>}. Schedu keeps no copy of the file,
+          and what it reads is saved only on this PC.
         </p>
       )}
       {error && <p className="text-[13px] text-danger">{error}</p>}

@@ -88,6 +88,7 @@ pub fn pro_open_link(which: String) -> Result<(), String> {
         "anthropic_keys" => "https://platform.claude.com/settings/keys",
         "anthropic_billing" => "https://platform.claude.com/settings/billing",
         "privacy" => "https://aquietdesk.com/privacy",
+        "terms" => "https://aquietdesk.com/schedu/terms/",
         _ => return Err("Unknown link".into()),
     };
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())

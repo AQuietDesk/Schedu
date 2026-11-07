@@ -66,7 +66,10 @@ function Licence({ status }: { status: ProStatus }) {
           error ? (
             <span className="text-danger">{errorText(error)}</span>
           ) : (
-            "After you buy, your licence key is in the receipt email and on your Polar purchases page."
+            <>
+              After you buy, your licence key is in the receipt email and on your Polar purchases page. Your key stays on this PC.{" "}
+              <LinkButton which="terms">Terms</LinkButton>
+            </>
           )
         }
       >
@@ -74,7 +77,7 @@ function Licence({ status }: { status: ProStatus }) {
           label="Syllabus import"
           description={
             status.on_sale
-              ? "Drop in a syllabus and every deadline, exam and grade weight lands in the class, ready to review. Yearly subscription."
+              ? "Drop in a syllabus and every deadline, exam and grade weight lands in the class, ready to review. Yearly subscription, non-refundable."
               : "Drop in a syllabus and every deadline, exam and grade weight lands in the class. Coming soon."
           }
         >
@@ -188,8 +191,8 @@ function AiKey() {
             </span>
           ) : (
             <>
-              Syllabus reading runs on your own Anthropic account, so you pay Anthropic directly (cents per syllabus) and no one else sees your files. The key is
-              kept in Windows Credential Manager, not in Schedu's data or backups, and is only ever sent to Anthropic.
+              Your key is saved only on this PC (Windows Credential Manager, never synced, never in backups) and is sent only to Anthropic to run your
+              own imports. AQuietDesk never receives it. You pay Anthropic directly, usually a few cents per syllabus.
             </>
           )
         }

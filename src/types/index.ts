@@ -378,4 +378,4 @@ export interface IntakeCommitResult {
   already_imported: number;
 }
 
-export type ProLink = "buy" | "portal" | "learn" | "anthropic_keys" | "anthropic_billing" | "privacy";
+export type ProLink = "buy" | "portal" | "learn" | "anthropic_keys" | "anthropic_billing" | "privacy" | "terms";
