@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { Dot, PrimaryButton, Segmented, SecondaryButton, TopBar } from "@/components/lo/primitives";
@@ -20,13 +19,16 @@ import { parseSelectedCalendarIds, SELECTED_CALENDARS_PREF_KEY } from "@/lib/goo
 import { NOTIFICATION_DEFAULTS, WEEKDAY_LABELS } from "@/lib/notificationDefaults";
 import { NOTIFICATION_WINDOW_OPTIONS, type NotificationWindowDays } from "@/lib/notificationEngine";
 import { cn } from "@/lib/utils";
+import { Group, SettingRow } from "@/components/settings/SettingsAtoms";
+import { ProSettings } from "@/components/pro/ProSettings";
 import type { Context } from "@/types";
 import type { Theme } from "@/store/themeStore";
 
-type Section = "general" | "school" | "google" | "notifications" | "obsidian" | "backup";
+type Section = "general" | "school" | "pro" | "google" | "notifications" | "obsidian" | "backup";
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "general", label: "General" },
   { id: "school", label: "School" },
+  { id: "pro", label: "Schedu Pro" },
   { id: "google", label: "Google" },
   { id: "notifications", label: "Notifications" },
   { id: "obsidian", label: "Obsidian" },
@@ -44,28 +46,6 @@ function usePref() {
 }
 
 // ---- layout atoms --------------------------------------------------------
-
-function Group({ title, footer, children }: { title?: string; footer?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      {title && <h2 className="ml-1 text-[13px] font-medium text-fg3">{title}</h2>}
-      <div className="flex flex-col rounded-[14px] border border-line bg-sidebar [&>*+*]:border-t [&>*+*]:border-line">{children}</div>
-      {footer && <p className="ml-1 text-[12.5px] leading-snug text-fg3">{footer}</p>}
-    </section>
-  );
-}
-
-function SettingRow({ label, description, children, htmlFor }: { label: ReactNode; description?: ReactNode; children?: ReactNode; htmlFor?: string }) {
-  return (
-    <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
-      <label htmlFor={htmlFor} className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[14.5px]">{label}</span>
-        {description && <span className="text-[12.5px] text-fg3">{description}</span>}
-      </label>
-      {children && <div className="flex items-center gap-2">{children}</div>}
-    </div>
-  );
-}
 
 const inlineInput =
   "h-8 rounded-lg border border-transparent bg-transparent px-2 text-right text-[14.5px] text-fg2 outline-none hover:bg-hover focus:border-line2 focus:bg-card focus:text-foreground";
@@ -528,6 +508,7 @@ export default function Settings() {
         <div className="flex min-w-0 max-w-[720px] flex-[999_1_480px] flex-col gap-7 px-6 pb-14 sm:pt-[104px]">
           {section === "general" && <General />}
           {section === "school" && <School />}
+          {section === "pro" && <ProSettings />}
           {section === "google" && <Google />}
           {section === "notifications" && <Notifications />}
           {section === "obsidian" && <Obsidian />}

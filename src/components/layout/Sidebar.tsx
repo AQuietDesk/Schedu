@@ -7,6 +7,7 @@ import { useContexts } from "@/hooks/useContexts";
 import { useGoogleConnected, useItemSyncStatuses, useSyncConflicts } from "@/hooks/useGoogle";
 import { useItems } from "@/hooks/useItems";
 import { usePreferences } from "@/hooks/usePreferences";
+import { useProReady } from "@/hooks/usePro";
 import { activeClasses, PERSONAL_HEX, personalLists } from "@/lib/areas";
 import { classColorHex } from "@/lib/classColors";
 import { formatClock, remainingSeconds } from "@/lib/focusTiming";
@@ -75,6 +76,7 @@ export function Sidebar() {
   const activeList = onTasks ? params.get("list") : null;
   const activeArea = onTasks ? params.get("area") : null;
   const name = prefs?.user_name?.trim() || "Schedu";
+  const proReady = useProReady();
 
   return (
     <aside className="flex w-[240px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-sidebar px-2.5 py-3.5">
@@ -85,7 +87,10 @@ export function Sidebar() {
           </svg>
         </div>
         <div className="flex min-w-0 flex-col leading-tight">
-          <span className="text-sm font-semibold">Schedu</span>
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
+            Schedu
+            {proReady && <span className="rounded bg-brand-soft px-1 text-[10px] font-semibold leading-4 text-brand">PRO</span>}
+          </span>
           <span className="truncate text-xs text-fg3">{name}</span>
         </div>
       </div>

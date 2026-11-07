@@ -1,0 +1,13 @@
+[package]
+name = "schedu-pro"
+version = "0.5.0"
+edition = "2021"
+license = "MIT"
+description = "Public stub for Schedu Pro. Official Pro builds replace this crate with the private one."
+publish = false
+
+[lib]
+name = "schedu_pro"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

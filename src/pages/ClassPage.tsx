@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Archive, ChevronDown, GraduationCap, Pencil, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, FileUp, GraduationCap, Pencil, Trash2 } from "lucide-react";
 import { EmptyState, Panel, SecondaryButton, TaskCheck, TopBar } from "@/components/lo/primitives";
 import { QueryBoundary } from "@/components/QueryBoundary";
 import { ClassDialog } from "@/components/school/ClassDialog";
+import { ImportSyllabusDialog } from "@/components/pro/ImportSyllabusDialog";
+import { errorText, useIntakeList, useIntakeUndo } from "@/hooks/usePro";
 import { InlineAdd } from "@/components/tasks/InlineAdd";
 import { Textarea } from "@/components/ui/textarea";
 import { useContexts, useUpdateContext } from "@/hooks/useContexts";
@@ -90,6 +92,36 @@ function Breakdown({ context, items, color }: { context: Context; items: Item[];
   );
 }
 
+/** Recent syllabus imports for this class, each with Undo. Hidden until there is one. */
+function ImportsPanel({ contextId }: { contextId: string }) {
+  const { data: imports } = useIntakeList(contextId);
+  const undo = useIntakeUndo();
+  const visible = (imports ?? []).filter((i) => i.status === "committed" || i.status === "review").slice(0, 5);
+  if (visible.length === 0) return null;
+  return (
+    <Panel title="Syllabus imports">
+      <ul className="flex flex-col gap-2.5 text-[13.5px]">
+        {visible.map((i) => (
+          <li key={i.id} className="flex items-center justify-between gap-3">
+            <Link to={`/school/${contextId}/import/${i.id}`} className="min-w-0 truncate hover:underline">
+              {i.file_name}
+              <span className="block text-[12px] text-fg3">
+                {i.status === "review" ? "Waiting for review" : `${i.added} added${i.merged ? ` · ${i.merged} updated` : ""}`}
+              </span>
+            </Link>
+            {i.status === "committed" && (
+              <button type="button" disabled={undo.isPending} onClick={() => undo.mutate(i.id)} className="shrink-0 text-[13px] text-fg3 hover:text-fg2">
+                Undo
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {undo.error && <p className="text-[12.5px] text-danger">{errorText(undo.error)}</p>}
+    </Panel>
+  );
+}
+
 function NotesTab({ context, items }: { context: Context; items: Item[] }) {
   const { data: notes, isLoading } = useNotesForContext(context.id);
   const createNote = useCreateNote(context.id);
@@ -166,6 +198,7 @@ export default function ClassPage() {
   const itemsQuery = useItems();
   const updateContext = useUpdateContext();
   const [editing, setEditing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const tab = (params.get("tab") as Tab | null) ?? "assignments";
 
@@ -197,6 +230,10 @@ export default function ClassPage() {
           <TopBar
             actions={
               <>
+                <SecondaryButton onClick={() => setImporting(true)}>
+                  <FileUp />
+                  Import syllabus
+                </SecondaryButton>
                 <SecondaryButton onClick={() => setEditing(true)}>
                   <Pencil />
                   Edit
@@ -278,10 +315,11 @@ export default function ClassPage() {
                     </>
                   )}
                 </div>
-                <div className="flex min-w-0 flex-[1_1_280px] flex-col">
+                <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
                   <Panel title="Grade breakdown" action={<button type="button" onClick={() => setEditing(true)} className="hover:text-fg2">Edit weights</button>}>
                     <Breakdown context={context} items={items} color={color} />
                   </Panel>
+                  <ImportsPanel contextId={context.id} />
                 </div>
               </div>
             )}
@@ -307,6 +345,7 @@ export default function ClassPage() {
           </div>
 
           <ClassDialog open={editing} onOpenChange={setEditing} context={context} />
+          <ImportSyllabusDialog open={importing} onOpenChange={setImporting} context={context} />
         </div>
       )}
     </QueryBoundary>
