@@ -18,7 +18,7 @@ tray, so reminders still arrive while the window is closed.
 
 Everything you enter is saved in `%APPDATA%\app.schedu.desktop` on your PC. Schedu only goes
 online for features you turn on (Google sync, weather) and to check for updates. The full
-details are in the privacy notice: https://aquietdesk.com/schedu/privacy
+details are in the privacy notice: https://aquietdesk.com/privacy
 
 ## Connect Google Calendar and Tasks (optional, beta)
 
@@ -39,10 +39,27 @@ Schedu, it may say **"Google hasn't verified this app"**. Click **Advanced**, th
 Schedu checks for a new version each time it starts. If there is one, it installs it and
 restarts itself, usually within a few seconds of opening. Your data is not affected.
 
+## Schedu Pro: import a syllabus
+
+1. Buy Schedu Pro from **Settings → Schedu Pro → Get Schedu Pro**. Polar emails you a licence key.
+   Pro is a yearly subscription and isn't refundable, so try **Import syllabus** first to see what
+   it does.
+2. Paste the key into the same page and press **Activate**, then **Install**. Schedu downloads
+   the Pro version, installs it over itself and restarts. Your data stays where it is.
+3. Add your own Anthropic API key, on the same page. Create an account at platform.claude.com,
+   add a few dollars of credit, create an API key, paste it in, and press **Test**. Each syllabus
+   costs a few cents on your Anthropic account.
+   Your key is saved only on your PC and is sent only to Anthropic. AQuietDesk never sees it.
+4. Open a class and press **Import syllabus**. Choose the PDF or Word file. In under a minute
+   you'll see every deliverable it found. Rows that need a look (no date, only a week number,
+   outside the term, in a reading week, already in the class) are listed first. Check each one
+   against its source text, fix anything, then press **Add**.
+5. Changed your mind? **Undo** next to the import on the class page removes everything it added.
+
 ## Help and refunds
 
 Email **discover@aquietdesk.com**. Paid and changed your mind? You get a full refund within 30
-days, no questions asked. Details: https://aquietdesk.com/schedu/terms
+days, no questions asked. Details: https://aquietdesk.com/schedu/terms/
 
 ## Uninstall
 

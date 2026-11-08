@@ -52,6 +52,20 @@ base64 = "0.22"
 url = "2"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-single-instance = "2"
+# Schedu Pro. The public repo holds a stub here; official Pro builds replace
+# the folder with the private crate (docs/PRO-BUILD.md).
+schedu-pro = { path = "pro" }
+
+[target.'cfg(windows)'.dependencies]
+# Credential Manager with local-only persistence (see secrets.rs).
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+winreg = "0.55"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2"

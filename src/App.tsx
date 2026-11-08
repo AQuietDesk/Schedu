@@ -10,6 +10,7 @@ import CalendarPage from "@/pages/Calendar";
 import Focus from "@/pages/Focus";
 import Stats from "@/pages/Stats";
 import Settings from "@/pages/Settings";
+import ImportReview from "@/pages/ImportReview";
 
 function App() {
   useThemeEffect();
@@ -27,6 +28,7 @@ function App() {
           <Route index element={<Today />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="school/:contextId" element={<ClassPage />} />
+          <Route path="school/:contextId/import/:batchId" element={<ImportReview />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="focus" element={<Focus />} />
           <Route path="stats" element={<Stats />} />

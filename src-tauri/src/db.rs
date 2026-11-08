@@ -225,6 +225,7 @@ pub fn init(db_path: &Path) -> rusqlite::Result<Connection> {
     migrate_regenerate_device_id(&conn)?;
     migrate_add_obsidian_source_columns(&conn)?;
     migrate_add_location_and_sync_status_columns(&conn)?;
+    migrate_add_intake(&conn)?;
     Ok(conn)
 }
 
@@ -319,6 +320,52 @@ fn migrate_add_location_and_sync_status_columns(conn: &Connection) -> rusqlite::
         )?;
     }
     Ok(())
+}
+
+/// Schedu Pro syllabus import (intake.rs). The tables exist in every build so
+/// a database moved between the free and Pro builds stays valid. `item` gets
+/// two columns tying an imported item to its source row and import, with a
+/// unique index (live items only) so the same row can't be imported twice.
+fn migrate_add_intake(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS intake_batch (
+           id TEXT PRIMARY KEY,
+           context_id TEXT NOT NULL REFERENCES context(id),
+           file_name TEXT NOT NULL,
+           file_sha256 TEXT NOT NULL,
+           model TEXT NOT NULL,
+           status TEXT NOT NULL CHECK (status IN ('review','committed','discarded','undone')),
+           course_json TEXT NOT NULL,
+           usage_json TEXT NOT NULL,
+           previous_context_json TEXT,
+           created_at TEXT NOT NULL,
+           committed_at TEXT,
+           undone_at TEXT
+         );
+         CREATE INDEX IF NOT EXISTS idx_intake_batch_context ON intake_batch(context_id);
+         CREATE TABLE IF NOT EXISTS intake_candidate (
+           id TEXT PRIMARY KEY,
+           batch_id TEXT NOT NULL REFERENCES intake_batch(id),
+           position INTEGER NOT NULL,
+           data_json TEXT NOT NULL,
+           decision TEXT CHECK (decision IN ('added','merged','skipped')),
+           item_id TEXT,
+           merged_previous_json TEXT
+         );
+         CREATE INDEX IF NOT EXISTS idx_intake_candidate_batch ON intake_candidate(batch_id);",
+    )?;
+    let has_column: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('item') WHERE name = 'intake_source_id'")?
+        .exists([])?;
+    if !has_column {
+        conn.execute_batch(
+            "ALTER TABLE item ADD COLUMN intake_source_id TEXT;
+             ALTER TABLE item ADD COLUMN intake_batch_id TEXT;",
+        )?;
+    }
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_item_intake_source_id          ON item(intake_source_id) WHERE intake_source_id IS NOT NULL AND deleted_at IS NULL;",
+    )
 }
 
 #[cfg(test)]

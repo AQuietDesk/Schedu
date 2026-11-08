@@ -4,11 +4,15 @@ mod db;
 mod demo;
 mod focus;
 mod google;
+mod intake;
+mod license;
 mod legacy_migration;
 mod models;
 mod notifications;
 mod obsidian_tasks;
+mod pro;
 mod search;
+mod secrets;
 
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
@@ -156,6 +160,7 @@ pub fn run() {
             app.manage(sync_trigger);
             app.manage(push_debouncer);
             backup::spawn(db_path.clone());
+            license::spawn_background_check();
 
             // Silent update check on every launch (autostart or manual) — see
             // check_for_update below. Errors (offline, no release yet, etc.)
@@ -223,6 +228,23 @@ pub fn run() {
             search::read_obsidian_note,
             search::test_obsidian_vault,
             obsidian_tasks::scan_obsidian_tasks,
+            pro::pro_status,
+            pro::pro_activate,
+            pro::pro_recheck,
+            pro::pro_deactivate,
+            pro::pro_install_upgrade,
+            pro::pro_open_link,
+            pro::ai_key_status,
+            pro::ai_key_save,
+            pro::ai_key_remove,
+            pro::ai_key_test,
+            pro::intake_estimate_cost,
+            intake::intake_extract,
+            intake::intake_get,
+            intake::intake_list,
+            intake::intake_commit,
+            intake::intake_undo,
+            intake::intake_discard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

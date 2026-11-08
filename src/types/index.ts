@@ -269,3 +269,115 @@ export interface StartFocusSessionInput {
   planned_duration_seconds?: number | null;
   break_duration_seconds: number;
 }
+
+// ---- Schedu Pro -------------------------------------------------------------
+
+export type LicenseState = "inactive" | "active" | "grace" | "check_needed" | "revoked";
+
+export interface ProStatus {
+  /** Whether this installed copy contains the Pro code. */
+  pro_build: boolean;
+  state: LicenseState;
+  /** True from the launch date: shows the buy buttons. */
+  on_sale: boolean;
+  /** True when this build can activate keys (also before launch). */
+  accepts_keys: boolean;
+  key_display: string | null;
+  device_label: string | null;
+  last_checked: string | null;
+  grace_until: string | null;
+  expires_at: string | null;
+}
+
+export interface AiKeyStatus {
+  saved: boolean;
+  last4: string | null;
+}
+
+export type ProModel = "claude-sonnet-5-5" | "claude-haiku-5-5";
+
+export type IntakeFlag =
+  | "missing_date"
+  | "week_only"
+  | "year_inferred"
+  | "outside_term"
+  | "during_break"
+  | "duplicate"
+  | "category_unmatched";
+
+export interface IntakeCandidate {
+  title: string;
+  kind: string;
+  due_date: string | null;
+  due_time: string | null;
+  week: number | null;
+  weight_percent: number | null;
+  grade_category: string | null;
+  source_text: string;
+  notes: string | null;
+  flags: IntakeFlag[];
+  duplicate_of: string | null;
+}
+
+export interface IntakeCourse {
+  course_code: string | null;
+  course_title: string | null;
+  instructor: string | null;
+  term_label: string | null;
+  term_start: string | null;
+  term_end: string | null;
+  breaks: { label: string; start: string; end: string }[];
+  grade_weights: { category: string; weight_percent: number }[];
+}
+
+export interface IntakeCandidateRow {
+  id: string;
+  position: number;
+  candidate: IntakeCandidate;
+  decision: "added" | "merged" | "skipped" | null;
+  item_id: string | null;
+}
+
+export type IntakeStatus = "review" | "committed" | "discarded" | "undone";
+
+export interface IntakeBatch {
+  id: string;
+  context_id: string;
+  file_name: string;
+  model: string;
+  status: IntakeStatus;
+  course: IntakeCourse;
+  usage: { input_tokens: number; output_tokens: number; estimated_cost_cents: number };
+  created_at: string;
+  committed_at: string | null;
+  undone_at: string | null;
+  candidates: IntakeCandidateRow[];
+}
+
+export interface IntakeSummary {
+  id: string;
+  file_name: string;
+  status: IntakeStatus;
+  created_at: string;
+  committed_at: string | null;
+  added: number;
+  merged: number;
+}
+
+export interface IntakeDecision {
+  candidate_id: string;
+  action: "add" | "merge" | "skip";
+  title: string;
+  due_date: string | null;
+  due_time: string | null;
+  assignment_type: string | null;
+}
+
+export interface IntakeCommitResult {
+  added: number;
+  merged: number;
+  skipped: number;
+  already_imported: number;
+}
+
+export type ProLink = "buy" | "portal" | "learn" | "anthropic_keys" | "anthropic_billing" | "privacy" | "terms";

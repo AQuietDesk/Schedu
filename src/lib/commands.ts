@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AiKeyStatus,
   Context,
   ContextInput,
   FocusOutcome,
@@ -7,6 +8,10 @@ import type {
   GoogleCalendarEvent,
   GoogleCalendarListEntry,
   GoogleTask,
+  IntakeBatch,
+  IntakeCommitResult,
+  IntakeDecision,
+  IntakeSummary,
   Item,
   ItemInput,
   ItemSyncStatus,
@@ -15,6 +20,8 @@ import type {
   ObsidianNote,
   ObsidianScanSummary,
   ObsidianVaultStatus,
+  ProLink,
+  ProStatus,
   QuickNote,
   QuickNoteInput,
   RemoteBackupStatus,
@@ -90,4 +97,25 @@ export const commands = {
     invoke<string>("read_obsidian_note", { relativePath }),
   testObsidianVault: (path: string) => invoke<ObsidianVaultStatus>("test_obsidian_vault", { path }),
   scanObsidianTasks: () => invoke<ObsidianScanSummary>("scan_obsidian_tasks"),
+
+  proStatus: () => invoke<ProStatus>("pro_status"),
+  proActivate: (key: string) => invoke<ProStatus>("pro_activate", { key }),
+  proRecheck: () => invoke<ProStatus>("pro_recheck"),
+  proDeactivate: () => invoke<ProStatus>("pro_deactivate"),
+  proInstallUpgrade: () => invoke<void>("pro_install_upgrade"),
+  proOpenLink: (which: ProLink) => invoke<void>("pro_open_link", { which }),
+  aiKeyStatus: () => invoke<AiKeyStatus>("ai_key_status"),
+  aiKeySave: (key: string) => invoke<AiKeyStatus>("ai_key_save", { key }),
+  aiKeyRemove: () => invoke<AiKeyStatus>("ai_key_remove"),
+  aiKeyTest: (model: string) => invoke<void>("ai_key_test", { model }),
+  intakeEstimateCost: (fileName: string, size: number, model: string) =>
+    invoke<number>("intake_estimate_cost", { fileName, size, model }),
+  intakeExtract: (contextId: string, fileName: string, fileBase64: string) =>
+    invoke<IntakeBatch>("intake_extract", { contextId, fileName, fileBase64 }),
+  intakeGet: (batchId: string) => invoke<IntakeBatch>("intake_get", { batchId }),
+  intakeList: (contextId: string) => invoke<IntakeSummary[]>("intake_list", { contextId }),
+  intakeCommit: (batchId: string, decisions: IntakeDecision[], apply: { instructor: boolean; grade_weights: boolean }) =>
+    invoke<IntakeCommitResult>("intake_commit", { batchId, decisions, apply }),
+  intakeUndo: (batchId: string) => invoke<void>("intake_undo", { batchId }),
+  intakeDiscard: (batchId: string) => invoke<void>("intake_discard", { batchId }),
 };

@@ -40,9 +40,80 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          # The free build needs it too: it activates keys before downloading Pro.
+          SCHEDU_PRO_BENEFIT_ID: ${{ vars.SCHEDU_PRO_BENEFIT_ID }}
         with:
           tagName: v__VERSION__
           releaseName: 'Schedu v__VERSION__'
           releaseBody: 'See the assets below to download and install this version. Existing installs will pick this up automatically.'
+          releaseDraft: false
+          prerelease: false
+
+  # Schedu Pro: the same app with the private schedu-pro crate in place of the
+  # public stub. Published to the public AQuietDesk/schedu-pro-releases repo,
+  # whose latest.json is the Pro update channel (src-tauri/tauri.pro.conf.json).
+  # The installer is useless without an activated licence key, and the free
+  # installer contains none of the Pro code. See docs/PRO-BUILD.md.
+  publish-pro:
+    needs: publish-tauri
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: check out the private Pro crate
+        uses: actions/checkout@v7
+        with:
+          repository: AQuietDesk/schedu-pro
+          ssh-key: ${{ secrets.SCHEDU_PRO_DEPLOY_KEY }}
+          path: pro-private
+
+      - name: swap the stub for the private crate
+        shell: pwsh
+        run: |
+          $a = (Get-FileHash src-tauri/pro/src/types.rs).Hash
+          $b = (Get-FileHash pro-private/src/types.rs).Hash
+          if ($a -ne $b) { throw "src/types.rs differs between the stub and the private crate" }
+          Remove-Item src-tauri/pro -Recurse -Force
+          New-Item -ItemType Directory src-tauri/pro | Out-Null
+          Copy-Item pro-private/Cargo.toml src-tauri/pro/
+          Copy-Item pro-private/src src-tauri/pro/ -Recurse
+          Remove-Item pro-private -Recurse -Force
+
+      - name: setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: test the Pro crate and the app with it
+        shell: pwsh
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SCHEDU_PRO_BENEFIT_ID: ${{ vars.SCHEDU_PRO_BENEFIT_ID }}
+        run: |
+          npm ci
+          npm run build
+          Push-Location src-tauri/pro; cargo test; Pop-Location
+          Push-Location src-tauri; cargo test; Pop-Location
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PRO_RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SCHEDU_PRO_BENEFIT_ID: ${{ vars.SCHEDU_PRO_BENEFIT_ID }}
+        with:
+          args: --config src-tauri/tauri.pro.conf.json
+          owner: AQuietDesk
+          repo: schedu-pro-releases
+          tagName: v__VERSION__
+          releaseName: 'Schedu Pro v__VERSION__'
+          releaseBody: 'Schedu Pro installs over the free app and needs an active Schedu Pro licence key. Existing Pro installs update automatically.'
           releaseDraft: false
           prerelease: false

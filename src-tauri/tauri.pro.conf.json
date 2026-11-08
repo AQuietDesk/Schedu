@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "longDescription": "A school and personal planner that keeps your data on your PC. Includes Schedu Pro syllabus import."
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/AQuietDesk/schedu-pro-releases/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
