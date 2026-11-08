@@ -16,11 +16,11 @@ this data, and Schedu has no accounts, analytics, advertising or tracking.
 
 | Feature | What is sent | Where |
 | --- | --- | --- |
-| Google Calendar and Tasks sync (optional) | The tasks you sync (title, dates, times, notes) are written to your own Google Calendar and Google Tasks, and your events and tasks are read back | Google, using your Google account |
+| Google Calendar and Tasks sync (optional) | The items you sync (title, dates, times, notes) are written to your own Google Tasks (and to Calendar events an earlier version linked), and changes to them are read back. Your calendars' events are read to show them in Schedu | Google, using your Google account |
 | Backups (optional) | A full copy of your Schedu database, without your Google sign-in | The folder you choose. If that folder is synced by Google Drive, OneDrive or Dropbox, that service stores the copy under its own terms |
 | Weather (optional) | The city name you type in Settings | Open-Meteo (open-meteo.com) |
 | Update check (automatic) | A request asking whether a newer version exists. It carries no data from the app | GitHub, where Schedu releases are hosted |
-| Schedu Pro licence (Pro only) | Your licence key, a salted fingerprint of your PC (not the raw Windows ID), your computer's name, and the app version; on activation and about once a week after | Polar (polar.sh), which issued the key |
+| Schedu Pro licence (Pro only) | Your licence key, a salted fingerprint of your PC (not the raw Windows ID), your computer's name, the app version and the operating system; on activation and about once a week after | Polar (polar.sh), which issued the key |
 | Schedu Pro syllabus import (Pro only, each time you import) | The syllabus file you choose, plus the class name, its term, today's date and its grade category names | Anthropic (anthropic.com), using your own Anthropic API key |
 
 Any service Schedu contacts can see your computer's IP address, as with any internet request.
@@ -29,22 +29,36 @@ Any service Schedu contacts can see your computer's IP address, as with any inte
 
 When you connect a Google account, Schedu asks Google for permission to:
 
-- see your calendars and their events, and create, change and delete events (Calendar);
-- see, create, change and delete your task lists and tasks (Tasks).
+- change and delete events (`calendar.events`): for Schedu items that are already linked to an
+  event in your primary calendar (created by an earlier version of Schedu), Schedu keeps that
+  event up to date, deletes it when you delete the item, and reads back changes you make to it
+  in Google. Schedu doesn't create new Calendar events; synced items go to Google Tasks, which
+  Google Calendar also shows;
+- see your calendars and their events (`calendar.readonly`): Schedu lists your calendars so you
+  can pick which to show, and reads their events live to display them in its Calendar view.
+  Those events aren't saved by Schedu;
+- see, create, change and delete tasks (`tasks`): Schedu adds the Schedu items you sync to
+  Google Tasks, keeps them up to date, deletes them when you delete the item, and reads back
+  changes you make to those same tasks (title, notes, done, deleted). It doesn't import your
+  other Google Tasks.
 
-Schedu uses this access only to show your Google events and tasks inside Schedu and to keep
-them in step with your Schedu tasks. The sign-in token Google issues is stored only on your PC.
-It's never included in backups and never sent to AQuietDesk or anyone else. Schedu doesn't sell
+Schedu doesn't ask for your email address or profile. The sign-in tokens Google issues are
+stored only on your PC, in Windows Credential Manager. They're never included in backups and
+never sent to AQuietDesk or anyone else. Google user data is never sent to Anthropic or any AI
+service. Schedu doesn't sell
 Google data, use it for advertising, or use it to train AI models, and no person at AQuietDesk can
 read it.
 
-Schedu's use and transfer of information received from Google APIs adheres to the
+Schedu's use and transfer to any other app of information received from Google APIs will
+adhere to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements.
 
-To stop sharing, choose **Settings → Google → Disconnect**, or remove Schedu at
-[myaccount.google.com/permissions](https://myaccount.google.com/permissions). Events and tasks
-Schedu already created in your Google account stay there until you delete them.
+To stop sharing, choose **Settings → Google → Disconnect**. That revokes Schedu's access at
+Google and deletes the tokens from your PC. You can also remove Schedu at
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions). Items you synced
+stay in Schedu until you delete them or the app's data folder, and events and tasks Schedu
+created in your Google account stay there until you delete them.
 
 ## Schedu Pro
 
@@ -62,7 +76,9 @@ server that could receive it.**
   account, and Anthropic handles them under its own terms
   ([Anthropic's privacy policy](https://www.anthropic.com/legal/privacy)). Schedu doesn't keep
   a copy of the file. It keeps, on your PC, the rows it read until you review them and the
-  items you approve. Nothing from Google Calendar or Google Tasks is ever sent to Anthropic.
+  items you approve. Duplicate checking against the class's existing items happens on your PC
+  after Anthropic replies; those items aren't sent. Google user data is never sent to Anthropic
+  or any AI service.
 - **Your licence key** and its activation record are saved only on this PC, the same way as
   the API key. Polar, which issued the key, sees the details in the table above so it can limit
   how many computers a key unlocks. **Settings → Schedu Pro → Remove from this PC** deletes them

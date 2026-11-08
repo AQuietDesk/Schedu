@@ -119,15 +119,14 @@ pub fn is_google_connected(state: State<DbPathState>) -> Result<bool, String> {
 pub fn connect_google(state: State<DbPathState>) -> Result<(), String> {
     let tokens = oauth::run_installed_app_flow()?;
     let conn = open_conn(&state)?;
-    oauth::store_tokens(&conn, &tokens);
-    Ok(())
+    oauth::store_tokens(&conn, &tokens)
 }
 
+/// Deletes the tokens from this PC and revokes Schedu's access at Google.
 #[tauri::command]
 pub fn disconnect_google(state: State<DbPathState>) -> Result<(), String> {
     let conn = open_conn(&state)?;
-    oauth::disconnect(&conn);
-    Ok(())
+    oauth::disconnect(&conn)
 }
 
 /// Routed through `SyncTrigger::run_sync_exclusive` rather than calling

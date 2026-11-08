@@ -1,3 +1,4 @@
+use crate::secrets;
 use super::config::{
     GOOGLE_AUTH_ENDPOINT, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_SCOPES,
     GOOGLE_TOKEN_ENDPOINT,
@@ -20,6 +21,7 @@ fn get_pref(conn: &Connection, key: &str) -> Option<String> {
     .flatten()
 }
 
+#[cfg(test)]
 fn set_pref(conn: &Connection, key: &str, value: &str) {
     let _ = conn.execute(
         "INSERT INTO preference (key, value) VALUES (?1, ?2) \
@@ -65,26 +67,103 @@ pub struct TokenResult {
     pub expires_in: u64,
 }
 
-pub fn is_connected(conn: &Connection) -> bool {
-    get_pref(conn, "google_refresh_token").is_some()
-}
+// Google tokens live in Windows Credential Manager (see secrets.rs), not in the
+// database. Versions up to 0.4.0 kept them in the `preference` table under
+// these keys; `migrate_legacy_tokens` moves them over once and deletes the rows.
+const LEGACY_TOKEN_PREFS: [(&str, &str); 3] = [
+    ("google_access_token", secrets::GOOGLE_ACCESS_TOKEN),
+    ("google_refresh_token", secrets::GOOGLE_REFRESH_TOKEN),
+    ("google_token_expiry", secrets::GOOGLE_TOKEN_EXPIRY),
+];
 
-pub fn disconnect(conn: &Connection) {
-    clear_pref(conn, "google_access_token");
-    clear_pref(conn, "google_refresh_token");
-    clear_pref(conn, "google_token_expiry");
-}
+const GOOGLE_REVOKE_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
 
-pub fn store_tokens(conn: &Connection, tokens: &TokenResult) {
-    set_pref(conn, "google_access_token", &tokens.access_token);
-    if let Some(refresh) = &tokens.refresh_token {
-        set_pref(conn, "google_refresh_token", refresh);
+/// Moves any token rows left in the database into the secret store. A value
+/// already in the store wins (it's newer than a row brought back by restoring
+/// an old backup). A row is deleted only once its value is safely stored, so a
+/// failed write is retried next time instead of losing the sign-in.
+fn migrate_tokens_with(
+    conn: &Connection,
+    mut stored: impl FnMut(&str) -> Result<Option<String>, String>,
+    mut store: impl FnMut(&str, &str) -> Result<(), String>,
+) {
+    for (pref, name) in LEGACY_TOKEN_PREFS {
+        let Some(value) = get_pref(conn, pref) else { continue };
+        let saved = match stored(name) {
+            Ok(Some(_)) => true,
+            Ok(None) => store(name, &value).is_ok(),
+            Err(_) => false,
+        };
+        if saved {
+            clear_pref(conn, pref);
+        }
     }
-    set_pref(
-        conn,
-        "google_token_expiry",
+}
+
+fn migrate_legacy_tokens(conn: &Connection) {
+    migrate_tokens_with(conn, secrets::get, secrets::set);
+}
+
+fn token(name: &str) -> Result<Option<String>, String> {
+    secrets::get(name)
+}
+
+pub fn is_connected(conn: &Connection) -> bool {
+    migrate_legacy_tokens(conn);
+    matches!(token(secrets::GOOGLE_REFRESH_TOKEN), Ok(Some(_)))
+}
+
+/// Deletes the tokens from this PC only (the secret store, plus any legacy
+/// rows). Used on its own when Google has already rejected the refresh token.
+fn clear_tokens(conn: &Connection) -> Result<(), String> {
+    for (pref, name) in LEGACY_TOKEN_PREFS {
+        clear_pref(conn, pref);
+        secrets::remove(name)?;
+    }
+    Ok(())
+}
+
+/// Asks Google to revoke Schedu's access. Revoking the refresh token ends the
+/// whole grant, so Schedu disappears from the user's Google account
+/// permissions. Best effort: offline, or a token Google already dropped, is
+/// ignored, because the local tokens are deleted either way.
+fn revoke_at_google(token: &str) {
+    let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    else {
+        return;
+    };
+    let _ = client.post(GOOGLE_REVOKE_ENDPOINT).form(&[("token", token)]).send();
+}
+
+/// Settings → Google → Disconnect: deletes the tokens from this PC, then
+/// revokes Schedu's access at Google.
+pub fn disconnect(conn: &Connection) -> Result<(), String> {
+    migrate_legacy_tokens(conn);
+    let grant = token(secrets::GOOGLE_REFRESH_TOKEN)
+        .ok()
+        .flatten()
+        .or_else(|| token(secrets::GOOGLE_ACCESS_TOKEN).ok().flatten());
+    clear_tokens(conn)?;
+    if let Some(grant) = grant {
+        revoke_at_google(&grant);
+    }
+    Ok(())
+}
+
+pub fn store_tokens(conn: &Connection, tokens: &TokenResult) -> Result<(), String> {
+    for (pref, _) in LEGACY_TOKEN_PREFS {
+        clear_pref(conn, pref);
+    }
+    secrets::set(secrets::GOOGLE_ACCESS_TOKEN, &tokens.access_token)?;
+    if let Some(refresh) = &tokens.refresh_token {
+        secrets::set(secrets::GOOGLE_REFRESH_TOKEN, refresh)?;
+    }
+    secrets::set(
+        secrets::GOOGLE_TOKEN_EXPIRY,
         &(now_unix() + tokens.expires_in).to_string(),
-    );
+    )
 }
 
 /// Runs the full installed-app (loopback + PKCE) OAuth flow: opens the system
@@ -196,7 +275,9 @@ fn refresh_access_token(conn: &Connection, refresh_token: &str) -> Result<String
     if res.status().as_u16() == 400 {
         let body = res.text().unwrap_or_default();
         if body.contains("invalid_grant") {
-            disconnect(conn); // clear the dead tokens so is_connected() goes false
+            // Clear the dead tokens so is_connected() goes false. Nothing to
+            // revoke: Google has already dropped this grant.
+            let _ = clear_tokens(conn);
             return Err(RECONNECT_REQUIRED.to_string());
         }
         return Err(format!("Google token refresh failed: {body}"));
@@ -208,20 +289,20 @@ fn refresh_access_token(conn: &Connection, refresh_token: &str) -> Result<String
         .json()
         .map_err(|e| e.to_string())?;
 
-    set_pref(conn, "google_access_token", &token_res.access_token);
-    set_pref(
-        conn,
-        "google_token_expiry",
+    secrets::set(secrets::GOOGLE_ACCESS_TOKEN, &token_res.access_token)?;
+    secrets::set(
+        secrets::GOOGLE_TOKEN_EXPIRY,
         &(now_unix() + token_res.expires_in).to_string(),
-    );
+    )?;
     Ok(token_res.access_token)
 }
 
 /// Returns a currently-valid access token, refreshing it first if it has
 /// expired (or is within 60s of expiring).
 pub fn get_valid_access_token(conn: &Connection) -> Result<String, String> {
-    let refresh_token = get_pref(conn, "google_refresh_token").ok_or("Not connected to Google")?;
-    let expiry: u64 = get_pref(conn, "google_token_expiry")
+    migrate_legacy_tokens(conn);
+    let refresh_token = token(secrets::GOOGLE_REFRESH_TOKEN)?.ok_or("Not connected to Google")?;
+    let expiry: u64 = token(secrets::GOOGLE_TOKEN_EXPIRY)?
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
@@ -229,5 +310,64 @@ pub fn get_valid_access_token(conn: &Connection) -> Result<String, String> {
         return refresh_access_token(conn, &refresh_token);
     }
 
-    get_pref(conn, "google_access_token").ok_or_else(|| "Not connected to Google".to_string())
+    token(secrets::GOOGLE_ACCESS_TOKEN)?.ok_or_else(|| "Not connected to Google".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE preference (key TEXT PRIMARY KEY, value TEXT NOT NULL);").unwrap();
+        conn
+    }
+
+    #[test]
+    fn migration_moves_legacy_rows_into_the_store_and_deletes_them() {
+        let conn = db();
+        set_pref(&conn, "google_access_token", "at");
+        set_pref(&conn, "google_refresh_token", "rt");
+        set_pref(&conn, "google_token_expiry", "123");
+        set_pref(&conn, "theme", "light");
+        let mut store: HashMap<String, String> = HashMap::new();
+        let snapshot = store.clone();
+        migrate_tokens_with(&conn, |n| Ok(snapshot.get(n).cloned()), |n, v| {
+            store.insert(n.into(), v.into());
+            Ok(())
+        });
+        assert_eq!(store.get(secrets::GOOGLE_ACCESS_TOKEN).map(String::as_str), Some("at"));
+        assert_eq!(store.get(secrets::GOOGLE_REFRESH_TOKEN).map(String::as_str), Some("rt"));
+        assert_eq!(store.get(secrets::GOOGLE_TOKEN_EXPIRY).map(String::as_str), Some("123"));
+        for (pref, _) in LEGACY_TOKEN_PREFS {
+            assert_eq!(get_pref(&conn, pref), None, "{pref} should be deleted");
+        }
+        assert_eq!(get_pref(&conn, "theme").as_deref(), Some("light"));
+    }
+
+    #[test]
+    fn migration_keeps_the_row_when_the_store_write_fails() {
+        let conn = db();
+        set_pref(&conn, "google_refresh_token", "rt");
+        migrate_tokens_with(&conn, |_| Ok(None), |_, _| Err("locked".into()));
+        assert_eq!(get_pref(&conn, "google_refresh_token").as_deref(), Some("rt"));
+    }
+
+    #[test]
+    fn migration_never_overwrites_a_token_already_in_the_store() {
+        let conn = db();
+        set_pref(&conn, "google_refresh_token", "old-from-backup");
+        let mut writes = 0;
+        migrate_tokens_with(
+            &conn,
+            |n| Ok((n == secrets::GOOGLE_REFRESH_TOKEN).then(|| "current".to_string())),
+            |_, _| {
+                writes += 1;
+                Ok(())
+            },
+        );
+        assert_eq!(writes, 0);
+        assert_eq!(get_pref(&conn, "google_refresh_token"), None);
+    }
 }

@@ -1,6 +1,6 @@
 //! Secrets kept in the operating system's credential store, never in the
-//! SQLite database: the Schedu Pro licence key and activation record, and the
-//! user's Anthropic API key. Keeping them out of the database keeps them out
+//! SQLite database: the Google sign-in tokens, the Schedu Pro licence key and
+//! activation record, and the user's Anthropic API key. Keeping them out of the database keeps them out
 //! of backups, which copy that file to a folder the user picks (often a cloud
 //! folder).
 //!
@@ -16,6 +16,9 @@ pub const LICENSE_KEY: &str = "pro-license-key";
 pub const ACTIVATION: &str = "pro-activation";
 pub const AI_KEY: &str = "anthropic-api-key";
 pub const DEVICE_ID: &str = "pro-device-id";
+pub const GOOGLE_ACCESS_TOKEN: &str = "google-access-token";
+pub const GOOGLE_REFRESH_TOKEN: &str = "google-refresh-token";
+pub const GOOGLE_TOKEN_EXPIRY: &str = "google-token-expiry";
 
 /// The demo profile (SCHEDU_DEMO=1) gets its own entries so screenshots never
 /// show, use or overwrite the real licence or API key.
