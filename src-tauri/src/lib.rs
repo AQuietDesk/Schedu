@@ -213,8 +213,6 @@ pub fn run() {
             google::commands::list_item_sync_statuses,
             google::commands::list_sync_conflicts,
             google::commands::resolve_conflict,
-            google::commands::list_upcoming_calendar_events,
-            google::commands::list_upcoming_google_tasks,
             google::commands::list_calendar_events_in_range,
             google::commands::list_calendars,
             backup::backup_now,

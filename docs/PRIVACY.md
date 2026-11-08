@@ -16,7 +16,7 @@ this data, and Schedu has no accounts, analytics, advertising or tracking.
 
 | Feature | What is sent | Where |
 | --- | --- | --- |
-| Google Calendar and Tasks sync (optional) | The items you sync (title, dates, times, notes) are written to your own Google Tasks (and to Calendar events an earlier version linked), and changes to them are read back. Your calendars' events are read to show them in Schedu | Google, using your Google account |
+| Google Calendar and Tasks (optional) | The items you sync (title, due date, notes, done) are written to your own Google Tasks, and changes to them are read back. Your calendars' events are read to show them in Schedu | Google, using your Google account |
 | Backups (optional) | A full copy of your Schedu database, without your Google sign-in | The folder you choose. If that folder is synced by Google Drive, OneDrive or Dropbox, that service stores the copy under its own terms |
 | Weather (optional) | The city name you type in Settings | Open-Meteo (open-meteo.com) |
 | Update check (automatic) | A request asking whether a newer version exists. It carries no data from the app | GitHub, where Schedu releases are hosted |
@@ -29,14 +29,9 @@ Any service Schedu contacts can see your computer's IP address, as with any inte
 
 When you connect a Google account, Schedu asks Google for permission to:
 
-- change and delete events (`calendar.events`): for Schedu items that are already linked to an
-  event in your primary calendar (created by an earlier version of Schedu), Schedu keeps that
-  event up to date, deletes it when you delete the item, and reads back changes you make to it
-  in Google. Schedu doesn't create new Calendar events; synced items go to Google Tasks, which
-  Google Calendar also shows;
 - see your calendars and their events (`calendar.readonly`): Schedu lists your calendars so you
-  can pick which to show, and reads their events live to display them in its Calendar view.
-  Those events aren't saved by Schedu;
+  can pick which to show, and reads their events live to display them in its Today and Calendar
+  views. Schedu never saves, creates or changes calendar events;
 - see, create, change and delete tasks (`tasks`): Schedu adds the Schedu items you sync to
   Google Tasks, keeps them up to date, deletes them when you delete the item, and reads back
   changes you make to those same tasks (title, notes, done, deleted). It doesn't import your

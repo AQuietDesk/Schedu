@@ -268,6 +268,7 @@ const RECONNECT_NEEDED_PREF: &str = "google_reconnect_needed";
 /// - `unauthorized_client`: it was issued to a different OAuth client. This is
 ///   what 0.4.0 installs hit after 0.4.1 moved to the brand Google project;
 /// - `invalid_client`: the OAuth client itself is unknown or deleted.
+///
 /// Anything else (rate limits, server errors, malformed requests) may be
 /// temporary, so the tokens are kept and the next sync retries.
 fn refresh_needs_reconnect(status: u16, body: &str) -> bool {

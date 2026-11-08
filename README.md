@@ -41,9 +41,10 @@ You only see this once per installer. Only download Schedu from the releases pag
   Dropbox folder works well). Schedu saves a full copy there on a schedule and keeps the previous
   copy too. To move to a new PC, install Schedu, choose the same folder, and restore from it.
   Backups never include your Google sign-in.
-- **Google Calendar and Tasks sync (optional, beta):** when you connect your Google account,
-  Schedu sends the tasks you sync to your own Google Calendar and Google Tasks, and reads them
-  back. It asks Google only for Calendar and Tasks access. It never sees your password.
+- **Google Calendar and Tasks (optional, beta):** when you connect your Google account, Schedu
+  keeps your items in sync with your own Google Tasks, and shows your Google Calendar events
+  next to them (read-only: it never changes your calendar). It asks Google only for Tasks access
+  and read-only Calendar access. It never sees your password.
 - **Weather (optional):** if you set a city in Settings, that city name is sent to
   [Open-Meteo](https://open-meteo.com) to look up the forecast.
 

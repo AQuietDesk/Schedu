@@ -3,8 +3,6 @@ import { commands } from "@/lib/commands";
 
 const CONNECTED_KEY = ["google", "connected"];
 const CONFLICTS_KEY = ["google", "conflicts"];
-const UPCOMING_EVENTS_KEY = ["google", "upcomingEvents"];
-const UPCOMING_TASKS_KEY = ["google", "upcomingTasks"];
 const CALENDAR_LIST_KEY = ["google", "calendarList"];
 export const ITEM_SYNC_STATUSES_KEY = ["google", "itemSyncStatuses"];
 
@@ -106,22 +104,6 @@ export function useResolveConflict() {
       queryClient.invalidateQueries({ queryKey: CONFLICTS_KEY });
       queryClient.invalidateQueries({ queryKey: ["items"] });
     },
-  });
-}
-
-export function useUpcomingCalendarEvents(enabled: boolean) {
-  return useQuery({
-    queryKey: UPCOMING_EVENTS_KEY,
-    queryFn: commands.listUpcomingCalendarEvents,
-    enabled,
-  });
-}
-
-export function useUpcomingGoogleTasks(enabled: boolean) {
-  return useQuery({
-    queryKey: UPCOMING_TASKS_KEY,
-    queryFn: commands.listUpcomingGoogleTasks,
-    enabled,
   });
 }
 

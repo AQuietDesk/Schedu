@@ -7,7 +7,6 @@ import type {
   FocusSession,
   GoogleCalendarEvent,
   GoogleCalendarListEntry,
-  GoogleTask,
   IntakeBatch,
   IntakeCommitResult,
   IntakeDecision,
@@ -75,8 +74,6 @@ export const commands = {
   listSyncConflicts: () => invoke<SyncConflict[]>("list_sync_conflicts"),
   resolveConflict: (id: string, resolution: "mine" | "google" | "dismiss") =>
     invoke<void>("resolve_conflict", { id, resolution }),
-  listUpcomingCalendarEvents: () => invoke<GoogleCalendarEvent[]>("list_upcoming_calendar_events"),
-  listUpcomingGoogleTasks: () => invoke<GoogleTask[]>("list_upcoming_google_tasks"),
   listCalendarEventsInRange: (calendarId: string, timeMin: string, timeMax: string) =>
     invoke<GoogleCalendarEvent[]>("list_calendar_events_in_range", { calendarId, timeMin, timeMax }),
   listCalendars: () => invoke<GoogleCalendarListEntry[]>("list_calendars"),

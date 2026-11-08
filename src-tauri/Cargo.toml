@@ -1,6 +1,6 @@
 [package]
 name = "tauri-app"
-version = "0.4.0"
+version = "0.4.1"
 description = "Schedu, a school and personal planner"
 authors = ["AQuietDesk <discover@aquietdesk.com>"]
 license = "MIT"

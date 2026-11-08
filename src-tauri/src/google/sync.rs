@@ -1,4 +1,4 @@
-use super::api::{self, CalendarEvent, Task};
+use super::api::{self, Task};
 use super::oauth;
 use crate::commands::{now, row_to_item, ITEM_COLUMNS};
 use crate::models::Item;
@@ -157,7 +157,7 @@ pub fn derive_sync_status(item: &Item, has_open_conflict: bool) -> SyncStatus {
     if item.last_sync_error.is_some() {
         return SyncStatus::Failed;
     }
-    if calendar_push_needed(item) || task_push_needed(item) {
+    if task_push_needed(item) {
         return SyncStatus::Pending;
     }
     SyncStatus::Synced
@@ -202,24 +202,6 @@ pub fn local_snapshot(item: &Item) -> SyncSnapshot {
         priority: Some(item.priority.clone()),
         estimated_duration: item.estimated_duration,
         location: item.location.clone(),
-    }
-}
-
-/// Google Calendar has no concept of an Item's completion `status` (an
-/// event's own `status` field means confirmed/tentative/cancelled, not
-/// done/not-done) and no `priority` — both are left `None` here rather than
-/// mapped to something misleading.
-fn calendar_remote_snapshot(event: &CalendarEvent) -> SyncSnapshot {
-    let (due_date, due_time) = calendar_due_date_time(event);
-    SyncSnapshot {
-        title: event.summary.clone(),
-        notes: event.description.clone(),
-        due_date,
-        due_time,
-        status: None,
-        priority: None,
-        estimated_duration: calendar_estimated_duration(event),
-        location: event.location.clone(),
     }
 }
 
@@ -359,41 +341,6 @@ fn map_tasks_status(remote_status: &str, current_local_status: &str) -> String {
     }
 }
 
-fn calendar_due_date_time(event: &CalendarEvent) -> (Option<String>, Option<String>) {
-    match &event.start {
-        Some(s) if s.date_time.is_some() => {
-            let dt = s.date_time.clone().unwrap();
-            let mut parts = dt.splitn(2, 'T');
-            let date = parts.next().unwrap_or_default().to_string();
-            let time = parts
-                .next()
-                .map(|t| t.chars().take(5).collect::<String>())
-                .unwrap_or_default();
-            (Some(date), Some(time))
-        }
-        Some(s) if s.date.is_some() => (s.date.clone(), None),
-        _ => (None, None),
-    }
-}
-
-/// Derives an Item's `estimated_duration` (minutes) from a timed event's
-/// start/end — the pull-side mirror of `api::event_body`'s push-side
-/// duration → end-time math. `None` for an all-day event (no time component
-/// to measure) or a malformed pair, so the caller falls back to preserving
-/// whatever the Item already had rather than clobbering it with a guess.
-fn calendar_estimated_duration(event: &CalendarEvent) -> Option<i64> {
-    let start = event.start.as_ref()?.date_time.as_deref()?;
-    let end = event.end.as_ref()?.date_time.as_deref()?;
-    let start_dt = DateTime::parse_from_rfc3339(start).ok()?;
-    let end_dt = DateTime::parse_from_rfc3339(end).ok()?;
-    let minutes = (end_dt - start_dt).num_minutes();
-    if minutes > 0 {
-        Some(minutes)
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,29 +471,6 @@ mod tests {
     }
 
     #[test]
-    fn calendar_remote_snapshot_omits_status_and_priority() {
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: Some("Prepare financial analysis and send to team".into()),
-            location: Some("Room 100".into()),
-            updated: Some("2026-03-02T00:00:00Z".into()),
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
-        };
-        let snap = calendar_remote_snapshot(&event);
-        assert_eq!(snap.status, None, "Calendar has no completion-status concept");
-        assert_eq!(snap.priority, None, "Calendar has no priority field");
-        assert_eq!(
-            snap.notes.as_deref(),
-            Some("Prepare financial analysis and send to team")
-        );
-        assert_eq!(snap.location.as_deref(), Some("Room 100"));
-    }
-
-    #[test]
     fn tasks_remote_snapshot_omits_location_and_priority() {
         let task = Task {
             id: "task-1".into(),
@@ -567,25 +491,19 @@ mod tests {
     #[test]
     fn diff_only_reports_fields_that_actually_differ_and_are_supported() {
         let local = local_snapshot(&sample_item());
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()), // same as local — no diff
-            description: Some("Prepare financial analysis and send to team".into()), // differs
-            location: Some("Room 100".into()),        // differs
-            updated: Some("2026-03-02T00:00:00Z".into()),
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
+        let remote = SyncSnapshot {
+            title: Some("Finish analysis".into()), // same as local — no diff
+            notes: Some("Prepare financial analysis and send to team".into()), // differs
+            location: Some("Room 100".into()), // differs
+            ..SyncSnapshot::default() // no opinion on status or due date
         };
-        let remote = calendar_remote_snapshot(&event);
         let diffs = diff_snapshots(&local, &remote);
         let fields: Vec<&str> = diffs.iter().map(|d| d.field).collect();
         assert!(fields.contains(&"Notes"));
         assert!(fields.contains(&"Location"));
         assert!(!fields.contains(&"Title"), "title matches, shouldn't be reported");
-        assert!(!fields.contains(&"Status"), "calendar can't compare status");
-        assert!(!fields.contains(&"Due date"), "remote had no start, nothing to compare");
+        assert!(!fields.contains(&"Status"), "remote has no status opinion");
+        assert!(!fields.contains(&"Due date"), "remote had no due date, nothing to compare");
     }
 
     #[test]
@@ -627,24 +545,22 @@ mod tests {
 
     #[test]
     fn remote_field_absent_never_overwrites_local_value() {
-        // A Calendar event with no description in the JSON payload (key
-        // omitted) must never be mistaken for "the user cleared their notes."
+        // A Google Task with no notes in the JSON payload (key omitted)
+        // must never be mistaken for "the user cleared their notes."
         let item = sample_item();
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: None, // omitted by Google
-            location: None,    // omitted by Google
+        let task = Task {
+            id: "task-1".into(),
+            title: Some("Finish analysis".into()),
+            notes: None, // omitted by Google
             updated: Some("2026-03-02T00:00:00Z".into()),
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
+            status: Some("needsAction".into()),
+            due: None,
+            deleted: None,
         };
-        let remote = calendar_remote_snapshot(&event);
+        let remote = tasks_remote_snapshot(&task);
         let resolved = apply_remote_snapshot_to_item(&item, &remote);
         assert_eq!(resolved.notes, item.notes, "absent description must not clear local notes");
-        assert_eq!(resolved.location, item.location, "absent location must not clear local location");
+        assert_eq!(resolved.location, item.location, "Tasks has no location, so it must not clear it");
     }
 
     #[test]
@@ -652,65 +568,18 @@ mod tests {
         // Distinct from the above: Google *did* include the key, with an
         // empty value — that's a real explicit clear, not an omission.
         let item = sample_item();
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: Some("".into()),
-            location: Some("".into()),
+        let task = Task {
+            id: "task-1".into(),
+            title: Some("Finish analysis".into()),
+            notes: Some("".into()),
             updated: Some("2026-03-02T00:00:00Z".into()),
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
+            status: Some("needsAction".into()),
+            due: None,
+            deleted: None,
         };
-        let remote = calendar_remote_snapshot(&event);
+        let remote = tasks_remote_snapshot(&task);
         let resolved = apply_remote_snapshot_to_item(&item, &remote);
         assert_eq!(resolved.notes.as_deref(), Some(""));
-        assert_eq!(resolved.location.as_deref(), Some(""));
-    }
-
-    #[test]
-    fn calendar_estimated_duration_derives_minutes_from_timed_event() {
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: None,
-            description: None,
-            location: None,
-            updated: None,
-            status: None,
-            start: Some(super::super::api::EventDateTime {
-                date: None,
-                date_time: Some("2026-03-05T14:00:00-07:00".into()),
-            }),
-            end: Some(super::super::api::EventDateTime {
-                date: None,
-                date_time: Some("2026-03-05T14:45:00-07:00".into()),
-            }),
-            color_id: None,
-        };
-        assert_eq!(calendar_estimated_duration(&event), Some(45));
-    }
-
-    #[test]
-    fn calendar_estimated_duration_is_none_for_all_day_event() {
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: None,
-            description: None,
-            location: None,
-            updated: None,
-            status: None,
-            start: Some(super::super::api::EventDateTime {
-                date: Some("2026-03-05".into()),
-                date_time: None,
-            }),
-            end: Some(super::super::api::EventDateTime {
-                date: Some("2026-03-06".into()),
-                date_time: None,
-            }),
-            color_id: None,
-        };
-        assert_eq!(calendar_estimated_duration(&event), None);
     }
 
     // -----------------------------------------------------------------
@@ -726,28 +595,11 @@ mod tests {
     }
 
     #[test]
-    fn calendar_push_not_needed_for_unlinked_item() {
-        let mut item = sample_item();
-        item.google_calendar_id = None;
-        item.last_synced_at_calendar = None;
-        assert!(!calendar_push_needed(&item));
-    }
-
-    #[test]
-    fn calendar_push_not_needed_without_due_date() {
-        let mut item = sample_item();
-        item.due_date = None;
-        item.last_synced_at_calendar = None;
-        assert!(!calendar_push_needed(&item));
-    }
-
-    #[test]
     fn push_not_needed_once_last_synced_at_is_after_updated_at() {
         let mut item = sample_item();
         item.updated_at = "2026-03-01T00:00:00Z".into();
         item.last_synced_at_calendar = Some("2026-03-02T00:00:00Z".into());
         item.last_synced_at_tasks = Some("2026-03-02T00:00:00Z".into());
-        assert!(!calendar_push_needed(&item));
         assert!(!task_push_needed(&item));
     }
 
@@ -795,7 +647,7 @@ mod tests {
 
     #[test]
     fn classifies_not_found_errors_as_user_actionable() {
-        let msg = friendly_push_error("calendar", "HTTP status client error (404 Not Found) for url ...");
+        let msg = friendly_push_error("tasks", "HTTP status client error (404 Not Found) for url ...");
         assert!(msg.contains("deleted") || msg.contains("no longer accessible"));
         assert!(!msg.contains("HTTP status client error"), "raw error text shouldn't leak into the UI message");
     }
@@ -842,106 +694,6 @@ mod tests {
 
     fn insert_test_item(conn: &Connection, item: &Item) {
         crate::commands::insert_item_row(conn, item).unwrap();
-    }
-
-    #[test]
-    fn apply_remote_calendar_event_round_trips_notes_and_location_on_pull() {
-        let conn = temp_conn();
-        let mut item = sample_item();
-        item.updated_at = "2026-03-01T00:00:00Z".into(); // unchanged locally since last sync
-        item.last_synced_at_calendar = Some("2026-03-01T00:00:00Z".into());
-        insert_test_item(&conn, &item);
-
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: Some("Updated from Google".into()),
-            location: Some("Conference Room B".into()),
-            updated: Some("2026-03-02T00:00:00Z".into()), // after last_synced_at_calendar
-            status: Some("confirmed".into()),
-            start: Some(super::super::api::EventDateTime {
-                date: None,
-                date_time: Some("2026-03-05T14:00:00-07:00".into()),
-            }),
-            end: Some(super::super::api::EventDateTime {
-                date: None,
-                date_time: Some("2026-03-05T14:45:00-07:00".into()),
-            }),
-            color_id: None,
-        };
-
-        apply_remote_calendar_event(&conn, &event);
-
-        let updated = find_item_by_id(&conn, "item-1").expect("item still present");
-        assert_eq!(updated.notes.as_deref(), Some("Updated from Google"));
-        assert_eq!(updated.location.as_deref(), Some("Conference Room B"));
-        assert_eq!(updated.estimated_duration, Some(45));
-        assert!(updated.last_synced_at_calendar.is_some());
-    }
-
-    #[test]
-    fn apply_remote_calendar_event_never_erases_notes_when_google_omits_description() {
-        let conn = temp_conn();
-        let mut item = sample_item();
-        item.updated_at = "2026-03-01T00:00:00Z".into();
-        item.last_synced_at_calendar = Some("2026-03-01T00:00:00Z".into());
-        insert_test_item(&conn, &item);
-
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: None, // omitted, not cleared
-            location: None,
-            updated: Some("2026-03-02T00:00:00Z".into()),
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
-        };
-
-        apply_remote_calendar_event(&conn, &event);
-
-        let updated = find_item_by_id(&conn, "item-1").expect("item still present");
-        assert_eq!(updated.notes, item.notes, "notes must survive an omitted description");
-        assert_eq!(updated.location, item.location, "location must survive an omitted location");
-    }
-
-    #[test]
-    fn apply_remote_calendar_event_records_full_snapshot_conflict_when_both_sides_changed() {
-        let conn = temp_conn();
-        let mut item = sample_item();
-        item.updated_at = "2026-03-03T00:00:00Z".into(); // changed locally after last sync
-        item.last_synced_at_calendar = Some("2026-03-01T00:00:00Z".into());
-        insert_test_item(&conn, &item);
-
-        let event = CalendarEvent {
-            id: "evt-1".into(),
-            summary: Some("Finish analysis".into()),
-            description: Some("Prepare financial analysis and send to team".into()),
-            location: Some("Room 100".into()),
-            updated: Some("2026-03-02T00:00:00Z".into()), // also changed after last sync
-            status: Some("confirmed".into()),
-            start: None,
-            end: None,
-            color_id: None,
-        };
-
-        apply_remote_calendar_event(&conn, &event);
-
-        assert!(item_has_open_conflict(&conn, "item-1"));
-        let (local_text, remote_text): (String, String) = conn
-            .query_row(
-                "SELECT local_snapshot, remote_snapshot FROM sync_conflict WHERE item_id = 'item-1'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .unwrap();
-        let local: SyncSnapshot = serde_json::from_str(&local_text).unwrap();
-        let remote: SyncSnapshot = serde_json::from_str(&remote_text).unwrap();
-        assert_eq!(local.priority.as_deref(), Some("High"), "local snapshot keeps full field set");
-        assert_eq!(remote.notes.as_deref(), Some("Prepare financial analysis and send to team"));
-        assert_eq!(remote.location.as_deref(), Some("Room 100"));
-        assert_eq!(remote.priority, None, "calendar source has no priority to report");
     }
 
     #[test]
@@ -1008,7 +760,7 @@ mod tests {
         let conn = temp_conn();
         let item = sample_item();
         insert_test_item(&conn, &item);
-        record_conflict(&conn, &item, "calendar", &SyncSnapshot::default());
+        record_conflict(&conn, &item, "tasks", &SyncSnapshot::default());
 
         let result = push_item_by_id(&conn, "unused-token", "item-1");
         assert!(result.is_err());
@@ -1059,7 +811,7 @@ fn non_deleted_items(conn: &Connection) -> Vec<Item> {
 fn deleted_items_with_remote_ids(conn: &Connection) -> Vec<Item> {
     let mut stmt = match conn.prepare(&format!(
         "SELECT {ITEM_COLUMNS} FROM item WHERE deleted_at IS NOT NULL \
-         AND (google_calendar_id IS NOT NULL OR google_task_id IS NOT NULL)"
+         AND google_task_id IS NOT NULL"
     )) {
         Ok(s) => s,
         Err(_) => return Vec::new(),
@@ -1111,86 +863,6 @@ fn item_has_open_conflict(conn: &Connection, item_id: &str) -> bool {
 // ---------------------------------------------------------------------------
 // Pull
 // ---------------------------------------------------------------------------
-
-fn pull_calendar(conn: &Connection, access_token: &str) -> Result<(), String> {
-    let stored_token = get_pref(conn, "google_calendar_sync_token");
-    let (events, next_sync_token) = match api::list_events(access_token, stored_token.as_deref()) {
-        Ok(res) => res,
-        Err(e) if e == "SYNC_TOKEN_INVALID" => api::list_events(access_token, None)?,
-        Err(e) => return Err(e),
-    };
-
-    for event in events {
-        apply_remote_calendar_event(conn, &event);
-    }
-
-    if let Some(token) = next_sync_token {
-        set_pref(conn, "google_calendar_sync_token", &token);
-    }
-    Ok(())
-}
-
-fn apply_remote_calendar_event(conn: &Connection, event: &CalendarEvent) {
-    let Some(item) = find_item_by_column(conn, "google_calendar_id", &event.id) else {
-        return; // Not one of ours (or already purged) — out of scope, see sync.rs docs.
-    };
-    let Some(remote_updated_at) = event.updated.as_deref().and_then(parse_rfc3339) else {
-        return;
-    };
-    let last_synced_at = item
-        .last_synced_at_calendar
-        .as_deref()
-        .and_then(parse_rfc3339);
-    let local_updated_at = match parse_rfc3339(&item.updated_at) {
-        Some(t) => t,
-        None => return,
-    };
-
-    match decide_pull_action(local_updated_at, remote_updated_at, last_synced_at) {
-        PullDecision::NoOp => {}
-        PullDecision::Conflict => {
-            let remote = calendar_remote_snapshot(event);
-            record_conflict(conn, &item, "calendar", &remote);
-        }
-        PullDecision::ApplyRemote => {
-            if event.status.as_deref() == Some("cancelled") {
-                // deliberately doesn't touch updated_at — see the comment below.
-                let _ = conn.execute(
-                    "UPDATE item SET deleted_at = ?2, last_synced_at_calendar = ?2 WHERE id = ?1",
-                    params![item.id, now()],
-                );
-                return;
-            }
-            let remote = calendar_remote_snapshot(event);
-            let resolved = apply_remote_snapshot_to_item(&item, &remote);
-            let ts = now();
-            // Deliberately does NOT bump `updated_at`: that column is read
-            // elsewhere as "did the user locally edit this" (both by
-            // apply_remote_task's own conflict check and by push_items'
-            // needs_*_push gate). A calendar-only field sync isn't a local
-            // edit, and bumping updated_at here previously caused a routine,
-            // content-free calendar re-apply (e.g. right after item creation,
-            // before the sync token had caught up) to make a genuinely
-            // slightly-earlier Tasks-side change look like a same-cycle local
-            // edit — turning a clean ApplyRemote into a false Conflict. Only
-            // last_synced_at_calendar advances here.
-            let _ = conn.execute(
-                "UPDATE item SET title = ?2, notes = ?3, due_date = ?4, due_time = ?5, \
-                 location = ?6, estimated_duration = ?7, last_synced_at_calendar = ?8 WHERE id = ?1",
-                params![
-                    item.id,
-                    resolved.title,
-                    resolved.notes,
-                    resolved.due_date,
-                    resolved.due_time,
-                    resolved.location,
-                    resolved.estimated_duration,
-                    ts,
-                ],
-            );
-        }
-    }
-}
 
 fn pull_tasks(conn: &Connection, access_token: &str) -> Result<(), String> {
     let last_sync = get_pref(conn, "google_tasks_last_sync");
@@ -1260,29 +932,6 @@ fn find_item_by_column(conn: &Connection, column: &str, value: &str) -> Option<I
 // Push
 // ---------------------------------------------------------------------------
 
-/// Pure dirty-state check reused everywhere a decision to push is made (the
-/// full sweep, the debounced single-item push, and the manual "Push
-/// Now"/"Retry Sync" command) — see PHASE 1's "reuse the existing dirty
-/// mechanism" requirement. Items mirror to Google Tasks only (which already
-/// shows on Google Calendar via "My Tasks"), so no new Calendar events are
-/// created. An Item that was linked to a Calendar event before that change
-/// keeps that existing event up to date, as long as it has a due_date.
-fn calendar_push_needed(item: &Item) -> bool {
-    let Some(local_updated_at) = parse_rfc3339(&item.updated_at) else {
-        return false;
-    };
-    item.google_calendar_id.is_some()
-        && item.due_date.is_some()
-        && match item
-            .last_synced_at_calendar
-            .as_deref()
-            .and_then(parse_rfc3339)
-        {
-            Some(ts) => local_updated_at > ts,
-            None => true,
-        }
-}
-
 fn task_push_needed(item: &Item) -> bool {
     let Some(local_updated_at) = parse_rfc3339(&item.updated_at) else {
         return false;
@@ -1322,143 +971,47 @@ fn friendly_push_error(channel: &str, raw: &str) -> String {
 /// full periodic sweep, the debounce worker, and the manual per-item push
 /// command — see PHASE 1/5's "don't build a second push implementation."
 fn push_one_item(conn: &Connection, access_token: &str, item: &Item) {
-    let needs_calendar_push = calendar_push_needed(item);
-    let needs_task_push = task_push_needed(item);
-    if !needs_calendar_push && !needs_task_push {
+    if !task_push_needed(item) {
         return;
     }
 
-    let mut new_calendar_id = item.google_calendar_id.clone();
-    let mut new_task_id = item.google_task_id.clone();
-    let mut calendar_result: Option<Result<(), String>> = None;
-    let mut task_result: Option<Result<(), String>> = None;
-
-    if needs_calendar_push {
-        if let Some(due_date) = &item.due_date {
-            let body = api::event_body(
-                &item.title,
-                item.notes.as_deref(),
-                due_date,
-                item.due_time.as_deref(),
-                item.estimated_duration,
-                item.location.as_deref(),
-            );
-            let result = match &item.google_calendar_id {
-                Some(id) => api::update_event(access_token, id, &body),
-                None => api::create_event(access_token, &body),
-            };
-            match result {
-                Ok(event) => {
-                    new_calendar_id = Some(event.id);
-                    calendar_result = Some(Ok(()));
-                    log_push(item, "calendar", "update", "success", None);
-                }
-                // A 404 on an *update* (never on a create) means the remote
-                // event was deleted directly in Google Calendar. The app's
-                // own pull-side precedent for that (apply_remote_calendar_event's
-                // "cancelled" handling) is "the whole Item is gone" — not
-                // "silently make a fresh replacement event" — so mirror that
-                // here rather than inventing a second, inconsistent policy
-                // for the same real-world event (Phase 6: "respect existing
-                // semantics... do not blindly recreate").
-                Err(e) if item.google_calendar_id.is_some() && is_not_found_error(&e) => {
-                    log_push(item, "calendar", "update", "deleted_remotely", Some(&e));
-                    mark_item_deleted_locally(conn, &item.id);
-                    return;
-                }
-                Err(e) => {
-                    log_push(item, "calendar", "update", "failed", Some(&e));
-                    calendar_result = Some(Err(e));
-                }
-            }
-        }
-    }
-
-    if needs_task_push {
-        let body = api::task_body(
-            &item.title,
-            item.notes.as_deref(),
-            item.due_date.as_deref(),
-            item.status == "Completed",
-        );
-        let result = match &item.google_task_id {
-            Some(id) => api::update_task(access_token, id, &body),
-            None => api::create_task(access_token, &body),
-        };
-        match result {
-            Ok(task) => {
-                new_task_id = Some(task.id);
-                task_result = Some(Ok(()));
-                log_push(item, "tasks", "update", "success", None);
-            }
-            // Same reasoning as the calendar branch above, mirroring
-            // apply_remote_task's `task.deleted` handling instead. The
-            // calendar branch may have already succeeded this same call
-            // (e.g. created a brand new event) — persist that before
-            // returning, or a task-side 404 here would silently drop a
-            // freshly-created google_calendar_id and orphan a duplicate on
-            // the next cycle.
-            Err(e) if item.google_task_id.is_some() && is_not_found_error(&e) => {
-                log_push(item, "tasks", "update", "deleted_remotely", Some(&e));
-                if calendar_result == Some(Ok(())) {
-                    let ts = now();
-                    let _ = conn.execute(
-                        "UPDATE item SET google_calendar_id = ?2, last_synced_at_calendar = ?3 WHERE id = ?1",
-                        params![item.id, new_calendar_id, ts],
-                    );
-                }
-                mark_item_deleted_locally(conn, &item.id);
-                return;
-            }
-            Err(e) => {
-                log_push(item, "tasks", "update", "failed", Some(&e));
-                task_result = Some(Err(e));
-            }
-        }
-    }
-
-    // Persist whichever id(s) did succeed either way, but only advance each
-    // channel's own last_synced_at when that channel's push actually
-    // succeeded — a failed push must keep retrying next cycle, and a channel
-    // that wasn't attempted this cycle must not have its timestamp touched.
-    let ts = now();
-    let _ = conn.execute(
-        "UPDATE item SET google_calendar_id = ?2, google_task_id = ?3 WHERE id = ?1",
-        params![item.id, new_calendar_id, new_task_id],
+    let body = api::task_body(
+        &item.title,
+        item.notes.as_deref(),
+        item.due_date.as_deref(),
+        item.status == "Completed",
     );
-    if let Some(Ok(())) = calendar_result {
-        let _ = conn.execute(
-            "UPDATE item SET last_synced_at_calendar = ?2 WHERE id = ?1",
-            params![item.id, ts],
-        );
-    }
-    if let Some(Ok(())) = task_result {
-        let _ = conn.execute(
-            "UPDATE item SET last_synced_at_tasks = ?2 WHERE id = ?1",
-            params![item.id, ts],
-        );
-    }
-
-    let mut errors: Vec<String> = Vec::new();
-    if let Some(Err(e)) = &calendar_result {
-        errors.push(friendly_push_error("calendar", e));
-    }
-    if let Some(Err(e)) = &task_result {
-        errors.push(friendly_push_error("tasks", e));
-    }
-
-    if errors.is_empty() {
-        let _ = conn.execute(
-            "UPDATE item SET last_sync_error = NULL, sync_failure_count = 0, last_sync_attempted_at = ?2 WHERE id = ?1",
-            params![item.id, ts],
-        );
-    } else {
-        let message = errors.join(" ");
-        let _ = conn.execute(
-            "UPDATE item SET last_sync_error = ?2, sync_failure_count = sync_failure_count + 1, \
-             last_sync_attempted_at = ?3 WHERE id = ?1",
-            params![item.id, message, ts],
-        );
+    let result = match &item.google_task_id {
+        Some(id) => api::update_task(access_token, id, &body),
+        None => api::create_task(access_token, &body),
+    };
+    let ts = now();
+    match result {
+        Ok(task) => {
+            log_push(item, "tasks", "update", "success", None);
+            let _ = conn.execute(
+                "UPDATE item SET google_task_id = ?2, last_synced_at_tasks = ?3, last_sync_error = NULL, \
+                 sync_failure_count = 0, last_sync_attempted_at = ?3 WHERE id = ?1",
+                params![item.id, task.id, ts],
+            );
+        }
+        // A 404 on an *update* (never on a create) means the task was deleted
+        // directly in Google Tasks. Mirror apply_remote_task's `deleted`
+        // handling (the whole Item is gone) rather than silently making a
+        // replacement task.
+        Err(e) if item.google_task_id.is_some() && is_not_found_error(&e) => {
+            log_push(item, "tasks", "update", "deleted_remotely", Some(&e));
+            mark_item_deleted_locally(conn, &item.id);
+        }
+        // last_synced_at_tasks stays as it was, so the push retries next cycle.
+        Err(e) => {
+            log_push(item, "tasks", "update", "failed", Some(&e));
+            let _ = conn.execute(
+                "UPDATE item SET last_sync_error = ?2, sync_failure_count = sync_failure_count + 1, \
+                 last_sync_attempted_at = ?3 WHERE id = ?1",
+                params![item.id, friendly_push_error("tasks", &e), ts],
+            );
+        }
     }
 }
 
@@ -1530,13 +1083,10 @@ pub(crate) fn push_item_by_id(
 
 fn push_deletions(conn: &Connection, access_token: &str) {
     for item in deleted_items_with_remote_ids(conn) {
-        let mut ok = true;
-        if let Some(id) = &item.google_calendar_id {
-            ok &= api::delete_event(access_token, id).is_ok();
-        }
-        if let Some(id) = &item.google_task_id {
-            ok &= api::delete_task(access_token, id).is_ok();
-        }
+        let ok = match &item.google_task_id {
+            Some(id) => api::delete_task(access_token, id).is_ok(),
+            None => true,
+        };
         if ok {
             // Confirmed removed on the Google side — safe to purge locally (spec §7.4).
             let _ = conn.execute("DELETE FROM item WHERE id = ?1", params![item.id]);
@@ -1554,7 +1104,6 @@ pub fn run_sync(conn: &Connection) -> Result<(), String> {
     }
     let access_token = oauth::get_valid_access_token(conn)?;
 
-    pull_calendar(conn, &access_token)?;
     pull_tasks(conn, &access_token)?;
     push_items(conn, &access_token)?;
     push_deletions(conn, &access_token);

@@ -226,12 +226,30 @@ pub fn init(db_path: &Path) -> rusqlite::Result<Connection> {
     migrate_add_obsidian_source_columns(&conn)?;
     migrate_add_location_and_sync_status_columns(&conn)?;
     migrate_add_intake(&conn)?;
+    drop_calendar_sync_links(&conn)?;
     Ok(conn)
 }
 
 /// One-time migration for DBs created before `last_synced_at` was split into
 /// per-channel columns (see the comment on `item` above). Safe to run on
 /// every startup — it's a no-op once the old column is gone.
+/// Schedu 0.4.1 removed two-way Google Calendar sync: Google Calendar is now
+/// display-only and only Google Tasks syncs. Forget the links older versions
+/// made between items and Calendar events, any pending Calendar sync
+/// conflicts (which held a copy of the event), and the Calendar sync cursor,
+/// so no Calendar data is kept. The items themselves are untouched.
+/// Idempotent, so it simply runs on every start.
+fn drop_calendar_sync_links(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE item SET google_calendar_id = NULL, last_synced_at_calendar = NULL \
+         WHERE google_calendar_id IS NOT NULL OR last_synced_at_calendar IS NOT NULL",
+        [],
+    )?;
+    conn.execute("DELETE FROM sync_conflict WHERE source = 'calendar'", [])?;
+    conn.execute("DELETE FROM preference WHERE key = 'google_calendar_sync_token'", [])?;
+    Ok(())
+}
+
 fn migrate_split_last_synced_at(conn: &Connection) -> rusqlite::Result<()> {
     let has_old_column: bool = conn
         .prepare("SELECT 1 FROM pragma_table_info('item') WHERE name = 'last_synced_at'")?
@@ -412,5 +430,41 @@ mod tests {
         // reassigning a new id each time.
         migrate_regenerate_device_id(&conn).unwrap();
         assert_eq!(get_pref(&conn, "device_id").unwrap(), regenerated);
+    }
+
+    /// 0.4.1 made Google Calendar display-only: old item-to-event links,
+    /// Calendar conflicts (a copy of the event) and the Calendar sync cursor
+    /// are dropped on startup, while the items and Google Tasks links stay.
+    #[test]
+    fn drops_calendar_sync_links_but_keeps_items_and_tasks_links() {
+        let conn = init(&scratch_db_path()).unwrap();
+        conn.execute_batch(
+            "INSERT INTO item (id, title, category, google_calendar_id, google_task_id,                last_synced_at_calendar, last_synced_at_tasks, created_at, updated_at)              VALUES ('i1', 'Essay', 'School', 'evt-1', 'task-1', '2026-01-01T00:00:00Z',                '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');              INSERT INTO sync_conflict (id, item_id, source, local_snapshot, remote_snapshot, created_at)              VALUES ('c1', 'i1', 'calendar', '{}', '{\"notes\":\"from Google\"}', '2026-01-02T00:00:00Z'),                     ('c2', 'i1', 'tasks', '{}', '{}', '2026-01-02T00:00:00Z');              INSERT INTO preference (key, value) VALUES ('google_calendar_sync_token', 'abc');",
+        )
+        .unwrap();
+
+        drop_calendar_sync_links(&conn).unwrap();
+        drop_calendar_sync_links(&conn).unwrap(); // safe to run on every start
+
+        let (title, cal_id, cal_synced, task_id): (String, Option<String>, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT title, google_calendar_id, last_synced_at_calendar, google_task_id FROM item WHERE id = 'i1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "Essay");
+        assert_eq!(cal_id, None);
+        assert_eq!(cal_synced, None);
+        assert_eq!(task_id.as_deref(), Some("task-1"));
+        let sources: Vec<String> = conn
+            .prepare("SELECT source FROM sync_conflict")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(sources, vec!["tasks".to_string()]);
+        assert_eq!(get_pref(&conn, "google_calendar_sync_token"), None);
     }
 }

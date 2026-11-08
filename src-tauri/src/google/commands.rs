@@ -9,22 +9,6 @@ fn open_conn(state: &State<DbPathState>) -> Result<rusqlite::Connection, String>
 }
 
 #[tauri::command]
-pub fn list_upcoming_calendar_events(
-    state: State<DbPathState>,
-) -> Result<Vec<api::CalendarEvent>, String> {
-    let conn = open_conn(&state)?;
-    let access_token = oauth::get_valid_access_token(&conn)?;
-    api::list_upcoming_events(&access_token, 10)
-}
-
-#[tauri::command]
-pub fn list_upcoming_google_tasks(state: State<DbPathState>) -> Result<Vec<api::Task>, String> {
-    let conn = open_conn(&state)?;
-    let access_token = oauth::get_valid_access_token(&conn)?;
-    api::list_upcoming_tasks(&access_token, 10)
-}
-
-#[tauri::command]
 pub fn list_calendar_events_in_range(
     state: State<DbPathState>,
     calendar_id: String,
@@ -296,27 +280,10 @@ pub fn resolve_conflict(
         let ts = crate::commands::now();
 
         if source == "calendar" {
-            let due_date = item
-                .due_date
-                .as_ref()
-                .ok_or("Item has no due_date to push as a calendar event")?;
-            let body = api::event_body(
-                &item.title,
-                item.notes.as_deref(),
-                due_date,
-                item.due_time.as_deref(),
-                item.estimated_duration,
-                item.location.as_deref(),
-            );
-            let event = match &item.google_calendar_id {
-                Some(gid) => api::update_event(&access_token, gid, &body),
-                None => api::create_event(&access_token, &body),
-            }?;
-            conn.execute(
-                "UPDATE item SET google_calendar_id = ?2, last_synced_at_calendar = ?3 WHERE id = ?1",
-                params![item_id, event.id, ts],
-            )
-            .map_err(|e| e.to_string())?;
+            // Calendar sync was removed in 0.4.1 (Google Calendar is
+            // display-only), so there's nothing to push: the conflict is
+            // just dropped below.
+            let _ = item;
         } else {
             let body = api::task_body(
                 &item.title,

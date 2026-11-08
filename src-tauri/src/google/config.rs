@@ -8,10 +8,11 @@ pub const GOOGLE_CLIENT_SECRET: &str = env!("GOOGLE_CLIENT_SECRET");
 
 pub const GOOGLE_AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-// calendar.readonly (in addition to calendar.events, which only covers
-// read/write on events the app itself manages) is what lets the app list the
-// user's other/shared calendars (CalendarList) and read events from them for
-// display — the two-way sync (push/pull) still only ever touches the primary
-// calendar via calendar.events, this only adds read access to *other*
-// calendars' events for the Calendar page's grid.
-pub const GOOGLE_SCOPES: &str = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks";
+// Two scopes, both "sensitive" (not "restricted"):
+// - tasks: two-way sync between Schedu items and the user's default Google
+//   Tasks list (only tasks Schedu created are read back or changed);
+// - calendar.readonly: list the user's calendars and read their events live
+//   to display them. Schedu never saves, creates or changes calendar events;
+//   0.4.1 dropped calendar.events along with the old two-way Calendar sync.
+// No openid/email/profile: Schedu never needs to know who the user is.
+pub const GOOGLE_SCOPES: &str = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks";

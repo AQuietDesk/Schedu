@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const CALENDAR_BASE: &str = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const CALENDAR_LIST_URL: &str = "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 const TASKS_BASE: &str = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks";
 
@@ -103,101 +102,8 @@ struct CalendarListResponse {
 struct EventListResponse {
     #[serde(default)]
     items: Vec<CalendarEvent>,
-    #[serde(rename = "nextSyncToken", default)]
-    next_sync_token: Option<String>,
     #[serde(rename = "nextPageToken", default)]
     next_page_token: Option<String>,
-}
-
-pub fn create_event(access_token: &str, body: &Value) -> Result<CalendarEvent, String> {
-    auth(client().post(CALENDAR_BASE), access_token)
-        .json(body)
-        .send()
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .json()
-        .map_err(|e| e.to_string())
-}
-
-pub fn update_event(
-    access_token: &str,
-    event_id: &str,
-    body: &Value,
-) -> Result<CalendarEvent, String> {
-    auth(
-        client().put(format!("{CALENDAR_BASE}/{event_id}")),
-        access_token,
-    )
-    .json(body)
-    .send()
-    .map_err(|e| e.to_string())?
-    .error_for_status()
-    .map_err(|e| e.to_string())?
-    .json()
-    .map_err(|e| e.to_string())
-}
-
-pub fn delete_event(access_token: &str, event_id: &str) -> Result<(), String> {
-    let res = auth(
-        client().delete(format!("{CALENDAR_BASE}/{event_id}")),
-        access_token,
-    )
-    .send()
-    .map_err(|e| e.to_string())?;
-    // 410 Gone means it's already deleted on Google's side — treat as success.
-    if res.status().is_success() || res.status().as_u16() == 410 || res.status().as_u16() == 404 {
-        Ok(())
-    } else {
-        Err(format!("Calendar delete failed: {}", res.status()))
-    }
-}
-
-/// Returns (events, next_sync_token). Pass `sync_token: None` for a full initial
-/// sync; pass the previously-returned token thereafter for incremental pulls.
-pub fn list_events(
-    access_token: &str,
-    sync_token: Option<&str>,
-) -> Result<(Vec<CalendarEvent>, Option<String>), String> {
-    let mut all_items = Vec::new();
-    let mut page_token: Option<String> = None;
-    let mut final_sync_token = None;
-
-    loop {
-        let mut query: Vec<(&str, &str)> = vec![("showDeleted", "true"), ("singleEvents", "true")];
-        if let Some(token) = &sync_token {
-            query.push(("syncToken", token));
-        }
-        if let Some(token) = &page_token {
-            query.push(("pageToken", token));
-        }
-
-        let res = auth(client().get(CALENDAR_BASE), access_token)
-            .query(&query)
-            .send()
-            .map_err(|e| e.to_string())?;
-
-        if res.status().as_u16() == 410 {
-            // Sync token expired/invalid — caller should retry with sync_token: None.
-            return Err("SYNC_TOKEN_INVALID".to_string());
-        }
-        let parsed: EventListResponse = res
-            .error_for_status()
-            .map_err(|e| e.to_string())?
-            .json()
-            .map_err(|e| e.to_string())?;
-
-        all_items.extend(parsed.items);
-        if let Some(next) = parsed.next_sync_token {
-            final_sync_token = Some(next);
-        }
-        page_token = parsed.next_page_token;
-        if page_token.is_none() {
-            break;
-        }
-    }
-
-    Ok((all_items, final_sync_token))
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -298,32 +204,6 @@ pub fn list_tasks(access_token: &str, updated_min: Option<&str>) -> Result<Vec<T
     Ok(all_items)
 }
 
-/// Read-only "what's coming up" listing for the Dashboard preview / Calendar
-/// page — distinct from `list_events`, which serves the incremental sync loop
-/// and has different (syncToken-based) semantics.
-pub fn list_upcoming_events(
-    access_token: &str,
-    max_results: i64,
-) -> Result<Vec<CalendarEvent>, String> {
-    let now = chrono::Utc::now().to_rfc3339();
-    let max_results_str = max_results.to_string();
-    let query = [
-        ("timeMin", now.as_str()),
-        ("singleEvents", "true"),
-        ("orderBy", "startTime"),
-        ("maxResults", max_results_str.as_str()),
-    ];
-    let parsed: EventListResponse = auth(client().get(CALENDAR_BASE), access_token)
-        .query(&query)
-        .send()
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .json()
-        .map_err(|e| e.to_string())?;
-    Ok(parsed.items)
-}
-
 /// Lists every calendar in the user's CalendarList — their own secondary
 /// calendars as well as ones other people have shared with them, exactly what
 /// shows up in the calendar-picker sidebar on calendar.google.com. Requires
@@ -421,72 +301,6 @@ fn list_events_in_range_at(
     }
 
     Ok(all_items)
-}
-
-/// Read-only "what's outstanding" listing for the Dashboard's Tasks preview.
-pub fn list_upcoming_tasks(access_token: &str, max_results: i64) -> Result<Vec<Task>, String> {
-    let max_results_str = max_results.to_string();
-    let query = [
-        ("showCompleted", "false"),
-        ("maxResults", max_results_str.as_str()),
-    ];
-    let parsed: TaskListResponse = auth(client().get(TASKS_BASE), access_token)
-        .query(&query)
-        .send()
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .json()
-        .map_err(|e| e.to_string())?;
-    Ok(parsed.items)
-}
-
-pub fn event_body(
-    title: &str,
-    description: Option<&str>,
-    due_date: &str,
-    due_time: Option<&str>,
-    duration_minutes: Option<i64>,
-    location: Option<&str>,
-) -> Value {
-    let (start, end) = match due_time {
-        Some(time) => {
-            // Calendar requires either a `timeZone` field or an explicit UTC
-            // offset on the dateTime itself — a bare naive string like
-            // "2026-07-25T14:00:00" is rejected with "Missing time zone
-            // definition." `due_date`/`due_time` are local wall-clock values,
-            // so the system's current local offset is the correct one to
-            // attach (avoids needing an IANA zone-name lookup).
-            let offset = chrono::Local::now().format("%:z").to_string();
-            let naive_start = format!("{due_date}T{time}:00");
-            // Calendar also rejects a zero-duration event (start == end), so a
-            // timed event always needs an end strictly after its start — fall
-            // back to a sensible default when the Item has no estimated_duration.
-            let duration = chrono::Duration::minutes(duration_minutes.unwrap_or(30).max(1));
-            let naive_end =
-                chrono::NaiveDateTime::parse_from_str(&naive_start, "%Y-%m-%dT%H:%M:%S")
-                    .map(|naive| (naive + duration).format("%Y-%m-%dT%H:%M:%S").to_string())
-                    .unwrap_or_else(|_| naive_start.clone());
-            (
-                json!({ "dateTime": format!("{naive_start}{offset}") }),
-                json!({ "dateTime": format!("{naive_end}{offset}") }),
-            )
-        }
-        None => {
-            let next_day = chrono::NaiveDate::parse_from_str(due_date, "%Y-%m-%d")
-                .map(|d| d.succ_opt().unwrap_or(d))
-                .map(|d| d.format("%Y-%m-%d").to_string())
-                .unwrap_or_else(|_| due_date.to_string());
-            (json!({ "date": due_date }), json!({ "date": next_day }))
-        }
-    };
-    json!({
-        "summary": title,
-        "description": description,
-        "location": location,
-        "start": start,
-        "end": end,
-    })
 }
 
 pub fn task_body(
