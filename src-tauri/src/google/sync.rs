@@ -1604,8 +1604,8 @@ pub fn spawn(app: tauri::AppHandle, db_path: PathBuf) -> (SyncTrigger, PushDebou
                 if e == oauth::RECONNECT_REQUIRED {
                     crate::notifications::notify(
                         &app,
-                        "Google connection expired",
-                        "Reconnect your Google account in Settings to resume Calendar/Tasks sync.",
+                        "Reconnect Google",
+                        "Schedu needs you to sign in to Google again to keep syncing. Open Settings → Google and choose Reconnect Google.",
                     );
                 }
             }

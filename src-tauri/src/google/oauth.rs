@@ -146,6 +146,7 @@ pub fn disconnect(conn: &Connection) -> Result<(), String> {
         .flatten()
         .or_else(|| token(secrets::GOOGLE_ACCESS_TOKEN).ok().flatten());
     clear_tokens(conn)?;
+    set_reconnect_needed(conn, false);
     if let Some(grant) = grant {
         revoke_at_google(&grant);
     }
@@ -163,7 +164,9 @@ pub fn store_tokens(conn: &Connection, tokens: &TokenResult) -> Result<(), Strin
     secrets::set(
         secrets::GOOGLE_TOKEN_EXPIRY,
         &(now_unix() + tokens.expires_in).to_string(),
-    )
+    )?;
+    set_reconnect_needed(conn, false);
+    Ok(())
 }
 
 /// Runs the full installed-app (loopback + PKCE) OAuth flow: opens the system
@@ -255,6 +258,47 @@ pub fn run_installed_app_flow() -> Result<TokenResult, String> {
 /// "the user needs to reconnect," not a transient failure.
 pub const RECONNECT_REQUIRED: &str = "GOOGLE_RECONNECT_REQUIRED";
 
+/// Set when Schedu dropped a Google connection it can't refresh, so Settings
+/// shows "Reconnect Google" rather than a plain "Connect" or an error. Cleared
+/// on a new sign-in or a deliberate Disconnect.
+const RECONNECT_NEEDED_PREF: &str = "google_reconnect_needed";
+
+/// Whether a failed refresh means the stored sign-in can never work again:
+/// - `invalid_grant`: the refresh token was revoked, or expired;
+/// - `unauthorized_client`: it was issued to a different OAuth client. This is
+///   what 0.4.0 installs hit after 0.4.1 moved to the brand Google project;
+/// - `invalid_client`: the OAuth client itself is unknown or deleted.
+/// Anything else (rate limits, server errors, malformed requests) may be
+/// temporary, so the tokens are kept and the next sync retries.
+fn refresh_needs_reconnect(status: u16, body: &str) -> bool {
+    if status != 400 && status != 401 {
+        return false;
+    }
+    let code = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned));
+    matches!(
+        code.as_deref(),
+        Some("invalid_grant" | "unauthorized_client" | "invalid_client")
+    )
+}
+
+fn set_reconnect_needed(conn: &Connection, needed: bool) {
+    if needed {
+        let _ = conn.execute(
+            "INSERT INTO preference (key, value) VALUES (?1, '1') \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![RECONNECT_NEEDED_PREF],
+        );
+    } else {
+        clear_pref(conn, RECONNECT_NEEDED_PREF);
+    }
+}
+
+pub fn reconnect_needed(conn: &Connection) -> bool {
+    get_pref(conn, RECONNECT_NEEDED_PREF).is_some() && !is_connected(conn)
+}
+
 fn refresh_access_token(conn: &Connection, refresh_token: &str) -> Result<String, String> {
     let client = reqwest::blocking::Client::new();
     let res = client
@@ -269,15 +313,18 @@ fn refresh_access_token(conn: &Connection, refresh_token: &str) -> Result<String
         .map_err(|e| e.to_string())?;
 
     // Read the body before checking status: `error_for_status` discards it,
-    // and Google's 400 response body is exactly where `invalid_grant` shows
-    // up — the only way to tell "dead refresh token, stop retrying" apart
-    // from an ordinary transient failure.
-    if res.status().as_u16() == 400 {
+    // and Google's 400/401 response body is exactly where the OAuth error
+    // code shows up — the only way to tell "dead refresh token, stop
+    // retrying" apart from an ordinary transient failure.
+    let status = res.status().as_u16();
+    if status == 400 || status == 401 {
         let body = res.text().unwrap_or_default();
-        if body.contains("invalid_grant") {
-            // Clear the dead tokens so is_connected() goes false. Nothing to
-            // revoke: Google has already dropped this grant.
+        if refresh_needs_reconnect(status, &body) {
+            // Clear the dead tokens so is_connected() goes false, and
+            // remember why, so Settings offers "Reconnect Google" instead of
+            // an error. Nothing to revoke: Google won't accept this grant.
             let _ = clear_tokens(conn);
+            set_reconnect_needed(conn, true);
             return Err(RECONNECT_REQUIRED.to_string());
         }
         return Err(format!("Google token refresh failed: {body}"));
@@ -344,6 +391,28 @@ mod tests {
             assert_eq!(get_pref(&conn, pref), None, "{pref} should be deleted");
         }
         assert_eq!(get_pref(&conn, "theme").as_deref(), Some("light"));
+    }
+
+    #[test]
+    fn dead_sign_ins_need_a_reconnect_but_temporary_failures_dont() {
+        // A 0.4.0 refresh token sent with the new brand client.
+        assert!(refresh_needs_reconnect(400, r#"{"error":"unauthorized_client","error_description":"Unauthorized"}"#));
+        assert!(refresh_needs_reconnect(400, r#"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#));
+        assert!(refresh_needs_reconnect(401, r#"{"error":"invalid_client","error_description":"The OAuth client was not found."}"#));
+        assert!(!refresh_needs_reconnect(400, r#"{"error":"invalid_request"}"#));
+        assert!(!refresh_needs_reconnect(400, "<html>bad gateway</html>"));
+        // The error code must be the code, not just mentioned somewhere.
+        assert!(!refresh_needs_reconnect(400, r#"{"error":"invalid_request","error_description":"not invalid_grant"}"#));
+        assert!(!refresh_needs_reconnect(500, r#"{"error":"invalid_grant"}"#));
+    }
+
+    #[test]
+    fn reconnect_flag_is_set_and_cleared() {
+        let conn = db();
+        set_reconnect_needed(&conn, true);
+        assert_eq!(get_pref(&conn, RECONNECT_NEEDED_PREF).as_deref(), Some("1"));
+        set_reconnect_needed(&conn, false);
+        assert_eq!(get_pref(&conn, RECONNECT_NEEDED_PREF), None);
     }
 
     #[test]

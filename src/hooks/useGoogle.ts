@@ -20,6 +20,18 @@ export function useGoogleConnected() {
   });
 }
 
+/** True after Schedu dropped a Google sign-in it couldn't refresh (revoked,
+ * expired, or made with an older OAuth client), so Settings can offer
+ * "Reconnect Google" instead of an error. Polled like useGoogleConnected,
+ * because the background sync loop is what notices. */
+export function useGoogleReconnectNeeded() {
+  return useQuery({
+    queryKey: ["google", "reconnectNeeded"],
+    queryFn: commands.googleReconnectNeeded,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useConnectGoogle() {
   const queryClient = useQueryClient();
   return useMutation({

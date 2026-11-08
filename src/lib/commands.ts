@@ -66,6 +66,7 @@ export const commands = {
   deleteFocusSession: (id: string) => invoke<void>("delete_focus_session", { id }),
 
   isGoogleConnected: () => invoke<boolean>("is_google_connected"),
+  googleReconnectNeeded: () => invoke<boolean>("google_reconnect_needed"),
   connectGoogle: () => invoke<void>("connect_google"),
   disconnectGoogle: () => invoke<void>("disconnect_google"),
   syncNow: () => invoke<void>("sync_now"),

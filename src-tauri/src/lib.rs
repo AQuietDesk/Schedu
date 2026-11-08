@@ -205,6 +205,7 @@ pub fn run() {
             focus::list_focus_sessions,
             focus::delete_focus_session,
             google::commands::is_google_connected,
+            google::commands::google_reconnect_needed,
             google::commands::connect_google,
             google::commands::disconnect_google,
             google::commands::sync_now,

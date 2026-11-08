@@ -6,7 +6,7 @@ import { ClassDialog } from "@/components/school/ClassDialog";
 import { Switch } from "@/components/ui/switch";
 import { useAutostartEnabled, useSetAutostart } from "@/hooks/useAutostart";
 import { useContexts, useUpdateContext } from "@/hooks/useContexts";
-import { useCalendarList, useConnectGoogle, useDisconnectGoogle, useGoogleConnected, useSyncNow } from "@/hooks/useGoogle";
+import { useCalendarList, useConnectGoogle, useDisconnectGoogle, useGoogleConnected, useGoogleReconnectNeeded, useSyncNow } from "@/hooks/useGoogle";
 import { useScanObsidianTasks, useTestObsidianVault } from "@/hooks/useObsidianVault";
 import { GradeScaleEditor } from "@/components/school/GradeScaleEditor";
 import { useBackupNow, useGradeScale, usePreferences, useSetPreference, useSyncFromBackup } from "@/hooks/usePreferences";
@@ -218,6 +218,7 @@ function School() {
 
 function Google() {
   const { data: connected, isLoading } = useGoogleConnected();
+  const { data: reconnectNeeded } = useGoogleReconnectNeeded();
   const connectGoogle = useConnectGoogle();
   const disconnectGoogle = useDisconnectGoogle();
   const syncNow = useSyncNow();
@@ -227,17 +228,18 @@ function Google() {
 
   const error = connectGoogle.isError
     ? String(connectGoogle.error)
-    : syncNow.isError
-      ? String(syncNow.error).includes("GOOGLE_RECONNECT_REQUIRED")
-        ? "Your Google connection expired. Reconnect to resume sync."
-        : String(syncNow.error)
+    : syncNow.isError && !String(syncNow.error).includes("GOOGLE_RECONNECT_REQUIRED")
+      ? String(syncNow.error)
       : null;
+  // A sign-in Schedu can no longer refresh isn't an error the user caused:
+  // offer to reconnect instead.
+  const needsReconnect = !connected && (!!reconnectNeeded || (syncNow.isError && String(syncNow.error).includes("GOOGLE_RECONNECT_REQUIRED")));
 
   return (
     <>
       <Group
         title="Account"
-        footer={error ? <span className="text-danger">{error}</span> : "Sign-in happens in your browser. Schedu only gets a Calendar and Tasks token, never your password. While Google reviews Schedu, it may say the app isn't verified: choose Advanced, then Go to Schedu."}
+        footer={error ? <span className="text-danger">{error}</span> : needsReconnect ? "Schedu needs you to sign in to Google again to keep syncing. Your items are safe; nothing was lost." : "Sign-in happens in your browser. Schedu only gets a Calendar and Tasks token, never your password. While Google reviews Schedu, it may say the app isn't verified: choose Advanced, then Go to Schedu."}
       >
         <SettingRow
           label={
@@ -246,7 +248,7 @@ function Google() {
               <span className="ml-2 rounded-md bg-brand-soft px-1.5 py-0.5 align-middle text-[11px] font-medium text-brand">Beta</span>
             </>
           }
-          description={isLoading ? "Checking…" : connected ? "Connected" : "Not connected"}>
+          description={isLoading ? "Checking…" : connected ? "Connected" : needsReconnect ? "Sign-in needs renewing" : "Not connected"}>
           {connected ? (
             <>
               <SecondaryButton onClick={() => syncNow.mutate()} disabled={syncNow.isPending}>
@@ -258,7 +260,7 @@ function Google() {
             </>
           ) : (
             <PrimaryButton onClick={() => connectGoogle.mutate()} disabled={connectGoogle.isPending}>
-              {connectGoogle.isPending ? "Waiting for sign-in…" : "Connect"}
+              {connectGoogle.isPending ? "Waiting for sign-in…" : needsReconnect ? "Reconnect Google" : "Connect"}
             </PrimaryButton>
           )}
         </SettingRow>

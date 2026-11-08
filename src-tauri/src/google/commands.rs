@@ -112,6 +112,15 @@ pub fn is_google_connected(state: State<DbPathState>) -> Result<bool, String> {
     Ok(oauth::is_connected(&conn))
 }
 
+/// True when Schedu dropped a Google sign-in it couldn't refresh (revoked,
+/// expired, or issued to an older OAuth client), so Settings can offer
+/// "Reconnect Google" instead of showing an error.
+#[tauri::command]
+pub fn google_reconnect_needed(state: State<DbPathState>) -> Result<bool, String> {
+    let conn = open_conn(&state)?;
+    Ok(oauth::reconnect_needed(&conn))
+}
+
 /// Blocks for up to ~3 minutes waiting on the browser sign-in — deliberately
 /// opens its own connection (see oauth::run_installed_app_flow's doc comment)
 /// rather than touching the shared DbState mutex used by the rest of the app.
