@@ -278,8 +278,10 @@ export interface ProStatus {
   /** Whether this installed copy contains the Pro code. */
   pro_build: boolean;
   state: LicenseState;
-  /** False until the Schedu Pro product is on sale. */
+  /** True from the launch date: shows the buy buttons. */
   on_sale: boolean;
+  /** True when this build can activate keys (also before launch). */
+  accepts_keys: boolean;
   key_display: string | null;
   device_label: string | null;
   last_checked: string | null;

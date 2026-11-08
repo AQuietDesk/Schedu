@@ -94,8 +94,12 @@ pub struct ProStatus {
     /// Whether this installed copy contains the Pro code.
     pub pro_build: bool,
     pub state: LicenseState,
-    /// False until the Schedu Pro product exists in Polar.
+    /// True from the launch date in builds that know the Polar product:
+    /// shows the "Get Schedu Pro" buttons.
     pub on_sale: bool,
+    /// True in builds that know the Polar product: shows the licence key field
+    /// (also before launch, so test purchases can be activated).
+    pub accepts_keys: bool,
     pub key_display: Option<String>,
     pub device_label: Option<String>,
     pub last_checked: Option<String>,
@@ -191,13 +195,19 @@ fn save(act: &mut Activation) -> Result<(), String> {
     secrets::set(secrets::ACTIVATION, &serde_json::to_string(act).map_err(|e| e.to_string())?)
 }
 
+/// Schedu Pro goes on sale on January 4, 2027 (midnight Eastern time).
+pub fn launched(now: DateTime<Utc>) -> bool {
+    now >= DateTime::parse_from_rfc3339("2027-01-04T05:00:00Z").expect("valid launch date")
+}
+
 pub fn status() -> ProStatus {
     let act = load();
     let state = evaluate(act.as_ref(), Utc::now(), &machine_fingerprint());
     ProStatus {
         pro_build: schedu_pro::is_pro_build(),
         state,
-        on_sale: BENEFIT_ID.is_some(),
+        on_sale: BENEFIT_ID.is_some() && launched(Utc::now()),
+        accepts_keys: BENEFIT_ID.is_some(),
         key_display: act.as_ref().map(|a| a.key_display.clone()),
         device_label: act.as_ref().map(|a| a.device_label.clone()),
         last_checked: act.as_ref().map(|a| a.last_validated_at.clone()),
@@ -372,6 +382,13 @@ pub fn spawn_background_check() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn goes_on_sale_jan_4_2027_eastern() {
+        let t = |s: &str| chrono::DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&chrono::Utc);
+        assert!(!super::launched(t("2027-01-04T04:59:59Z")));
+        assert!(super::launched(t("2027-01-04T05:00:00Z")));
+    }
+
     use super::*;
 
     fn act(last: DateTime<Utc>) -> Activation {

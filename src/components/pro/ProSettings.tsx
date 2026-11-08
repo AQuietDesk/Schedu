@@ -84,7 +84,7 @@ function Licence({ status }: { status: ProStatus }) {
           <SecondaryButton onClick={() => void commands.proOpenLink("learn")}>Learn more</SecondaryButton>
           {status.on_sale && <PrimaryButton onClick={() => void commands.proOpenLink("buy")}>Get Schedu Pro</PrimaryButton>}
         </SettingRow>
-        {status.on_sale && (
+        {status.accepts_keys && (
           <form
             className="flex flex-wrap items-center gap-2 px-4 py-3"
             onSubmit={(e) => {

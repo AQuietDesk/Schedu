@@ -45,7 +45,9 @@ the rest:
    (prefix e.g. `SCHEDU`, activation limit e.g. 3, "Enable user to deactivate instances" on).
    Test it in Polar's sandbox first.
 2. **GitHub variable** `SCHEDU_PRO_BENEFIT_ID` on AQuietDesk/Schedu = that benefit's id. Until
-   it's set, the app says Pro isn't on sale and refuses every key.
+   it's set, the app says Pro isn't on sale and refuses every key. Once it's set, the key field
+   shows straight away (for test purchases), but the "Get Schedu Pro" buttons only appear from
+   the launch date in `license::launched` (Jan 4, 2027, midnight Eastern).
 3. **Private repo** AQuietDesk/schedu-pro (holds the crate) and a read-only **deploy key**:
    public half on schedu-pro, private half as secret `SCHEDU_PRO_DEPLOY_KEY` on Schedu.
 4. **Public repo** AQuietDesk/schedu-pro-releases (empty; releases only) and a fine-grained
